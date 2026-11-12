@@ -24,7 +24,8 @@
         "es",
         "fr",
         "de",
-        "it"
+        "it",
+        "pt"
       ],
       "default": "en",
       "description": "The language of the labels on the map."

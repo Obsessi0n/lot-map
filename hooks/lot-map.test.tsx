@@ -166,7 +166,7 @@ test('hook helpers', () => {
   expect(stringsFor('en').stations.web).toBe('Network')
 })
 
-const LANGUAGES = ['en', 'ru', 'es', 'fr', 'de', 'it'] as const
+const LANGUAGES = ['en', 'ru', 'es', 'fr', 'de', 'it', 'pt'] as const
 
 test('every language has every word, in a table of its own', () => {
   const en = stringsFor('en')
@@ -180,7 +180,7 @@ test('every language has every word, in a table of its own', () => {
   expect(stringsFor('constructor').title).toBe(en.title)
 })
 
-for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichiers   b/content.py'], ['de', 'Dateien    b/content.py'], ['it', 'File      b/content.py']] as const) {
+for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichiers   b/content.py'], ['de', 'Dateien    b/content.py'], ['it', 'File      b/content.py'], ['pt', 'Ficheiros b/content.py']] as const) {
   test(`the pane speaks ${language}, its columns even`, { options: { language } }, async ($, on) => {
     on('clock.now', () => ({ value: 1_000_000 }))
     on('tool.call', () => ({ result: {} }))
