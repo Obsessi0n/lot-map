@@ -1,20 +1,30 @@
 {
-  "name": "lot-map",
-  "version": "0.5.2",
-  "description": "A live map beside the chat: memory, files, shell, web, model, agents, skills and hooks light up as they are used",
+  "name": "lot-quest",
+  "version": "0.1.0",
+  "description": "A dungeon crawl beside the chat: a pixel hero walks while the model thinks, meets something at every tool call and keeps experience and loot between sessions. A fork of lot-map by Aleksei Volodin",
   "author": {
-    "name": "Aleksei Volodin",
-    "url": "https://github.com/alexeyw"
+    "name": "Obsessi0n",
+    "url": "https://github.com/Obsessi0n"
   },
-  "homepage": "https://github.com/alexeyw/lot-map",
-  "repository": "https://github.com/alexeyw/lot-map",
-  "supportUrl": "https://github.com/alexeyw/lot-map/issues",
-  "privacyPolicyUrl": "https://github.com/alexeyw/lot-map/blob/main/PRIVACY.md",
-  "keywords": ["mod", "map", "visualization", "activity", "tool calls", "hooks", "subagents", "memory"],
+  "homepage": "https://github.com/Obsessi0n/lot-map/tree/rpg",
+  "repository": "https://github.com/Obsessi0n/lot-map",
+  "supportUrl": "https://github.com/Obsessi0n/lot-map/issues",
+  "privacyPolicyUrl": "https://github.com/Obsessi0n/lot-map/blob/rpg/PRIVACY.md",
+  "keywords": ["mod", "game", "rpg", "pixel art", "activity", "tool calls", "terminal", "subagents"],
   "license": "MIT",
   "icon": "./.claude-plugin/icon.png",
   "types": "./types/index.d.ts",
   "userConfig": {
+    "view": {
+      "type": "string",
+      "title": "View",
+      "options": [
+        "quest",
+        "map"
+      ],
+      "default": "quest",
+      "description": "What the pane shows: the quest, a dungeon crawl read off the session, or the map of stations as lot-map draws it."
+    },
     "language": {
       "type": "string",
       "title": "Language",
@@ -125,7 +135,7 @@
     },
     "terminalMap": {
       "type": "boolean",
-      "title": "Map in a terminal",
+      "title": "Picture in a terminal",
       "default": true,
       "description": "A terminal draws no picture, so where the pane has the room the map is drawn there with braille dots and letters. Turn off to keep only the rows of text."
     }

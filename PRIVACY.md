@@ -1,3 +1,5 @@
+> **This fork (lot-quest)** keeps one more thing between sessions: the hero's numbers for each folder (experience, gold, hearts, how many chests, forgings, fights and bosses) and the names of the loot, in Claude Code's own store for the plugin, under the folder's full path. The diary under the scene holds the same names a row of the map holds, never content, and lives only for the session. The rest of this page is lot-map's and holds for the fork as well.
+
 # Privacy
 
 lot-map is a mod for Claude Code that draws a map of the work in a pane beside the chat. It runs inside Claude Code on your computer. There is no lot-map service, no account and no server: nothing the mod sees leaves your machine through it.

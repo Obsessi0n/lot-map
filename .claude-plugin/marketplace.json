@@ -1,11 +1,11 @@
 {
-  "name": "lot-map",
+  "name": "lot-quest",
   "owner": {
-    "name": "alexeyw"
+    "name": "Obsessi0n"
   },
   "plugins": [
     {
-      "name": "lot-map",
+      "name": "lot-quest",
       "source": "./"
     }
   ]

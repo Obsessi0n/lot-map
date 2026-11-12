@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Board, Entry, StationId, Status } from '../types'
+import type { Board, Entry, Hero, StationId, Status } from '../types'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
+import { actOf, deed, freshHero, heroFrom, keep, mission, paintQuest, questCells, questSize, questSvg, rested, sheet, victory, wordsFor } from './quest'
 import { SETTLE_MS, drawTermMap, isLively, termSize } from './term'
 import type { TermSize } from './term'
 
-const PANE = 'lot-map'
+const PANE = 'lot-quest'
 /** The terminal's map: its key in the pane's drawing, and how often it is repainted while something on it moves. */
 const RASTER = 'map'
 const FRAME_MS = 125
@@ -15,7 +16,10 @@ const KEEP = 80
 const CREW = 12
 
 // Change the tag when a field of Entry or Board changes: it declines what an earlier version stored.
-const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-3' })
+const board = atom({ plugin: 'lot-quest', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-3' })
+
+// The hero of the quest, as the session has them. What lasts is copied to the store whenever it changes.
+const hero = atom({ plugin: 'lot-quest', key: 'hero' } as const, freshHero(), { shape: 'hero-1' })
 
 const newId = (now: number): string => `${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
@@ -35,6 +39,7 @@ type Start = {
   status?: Status
   agentId?: string
   mark?: Entry['mark']
+  forge?: true
   /** Adds nothing to the station's count: a second view of something already counted. */
   uncounted?: boolean
   startedAt?: number
@@ -65,6 +70,7 @@ async function begin($: EngineInterface, start: Start): Promise<string | undefin
       ...(start.status !== undefined ? { endedAt: start.endedAt ?? now } : {}),
       ...(start.agentId !== undefined ? { agentId: start.agentId } : {}),
       ...(start.mark !== undefined ? { mark: start.mark } : {}),
+      ...(start.forge === true ? { forge: true as const } : {}),
     }
     await update($, board, b => ({
       ...b,
@@ -122,17 +128,28 @@ async function settle($: EngineInterface, task: string, status: Status): Promise
 }
 
 /** What the terminal's map was last drawn from, and how many frames it still has to move. */
-type Shown = { size: TermSize; board: Board; at: number; frames: number; skipped: number }
+type Shown = { view: 'map' | 'quest'; size: TermSize; board: Board; at: number; frames: number; skipped: number }
 
 /** One frame of the terminal's map between two redraws: the same board at the time it now is. False when the map is not there to repaint. */
 async function animate($: EngineInterface, live: Shown, setup: Setup): Promise<boolean> {
   const now = await $.clock.now()
   // A call still running keeps the map moving; otherwise it comes to rest a few seconds after the last change.
   if (isLively(live.board, now)) live.frames = Math.max(live.frames, 2)
-  // Long after the last change only a running node beats: a third of the frames is enough for that.
-  if (now - live.at > SETTLE_MS && live.skipped++ % 3 !== 0) return true
-  const answer = await $.ui.blit({ requestId: PANE, key: RASTER, cells: drawTermMap(live.board, now, setup, live.size.columns, live.size.rows), ...live.size })
+  // Long after the last change only a running node beats: a third of the frames is enough for that. The hero walks at every frame.
+  if (live.view === 'map' && now - live.at > SETTLE_MS && live.skipped++ % 3 !== 0) return true
+  const cells = live.view === 'quest' ? questCells(paintQuest(live.board, now, live.size.columns, live.size.rows * 2)) : drawTermMap(live.board, now, setup, live.size.columns, live.size.rows)
+  const answer = await $.ui.blit({ requestId: PANE, key: RASTER, cells, ...live.size })
   return answer.deny === undefined
+}
+
+/** Something happened to the hero: the change is made in the session's state, and what lasts of it is kept for the next session. */
+async function adventure($: EngineInterface, key: string | undefined, change: (hero: Hero, now: number) => Hero): Promise<void> {
+  await quietly(async () => {
+    const now = await $.clock.now()
+    const last: { hero?: Hero } = {}
+    await update($, hero, h => (last.hero = change(h, now)))
+    if (last.hero !== undefined && key !== undefined) await $.store.set(key, keep(last.hero))
+  })
 }
 
 /** How full the context window is, as the status line has it; costs nothing. */
@@ -181,6 +198,11 @@ export const register: Register = (on, options) => {
   let shown: Shown | undefined
   let timer: { cancel: () => void } | undefined
 
+  // The quest's own words, and where this folder's hero is kept between sessions.
+  const words = wordsFor(options.language)
+  const isQuest = setup.view === 'quest'
+  let heroKey: string | undefined
+
   on('session.start', async ($, e, next) => {
     await quietly(async () => {
       timer?.cancel()
@@ -194,19 +216,25 @@ export const register: Register = (on, options) => {
         })
       })
     })
-    await quietly(() => $.command.register({ name: 'lot-map', description: t.command }))
-    void quietly(() => $.ui.open({ id: PANE, title: t.title }))
+    await quietly(() => $.command.register({ name: 'lot-quest', description: isQuest ? words.command : t.command }))
+    void quietly(() => $.ui.open({ id: PANE, title: isQuest ? words.pane : t.title }))
     await quietly(async () => {
       modelKey = `model:${e.cwd}`
       const kept = await $.store.get(modelKey)
       if (lastModel === undefined && typeof kept === 'string') lastModel = kept
     })
+    await quietly(async () => {
+      // The hero of this folder comes back as the last session left them. A reload must not undo what this session did.
+      heroKey = `hero:${e.cwd}`
+      const kept = heroFrom(await $.store.get(heroKey))
+      if (kept !== undefined) await update($, hero, h => (h.xp === 0 && h.log.length === 0 ? kept : h))
+    })
     return next(e)
   })
 
-  on('command.run', { command: 'lot-map' }, async $ => {
-    const opened = await $.ui.open({ id: PANE, title: t.title })
-    return { text: opened.isPlaced ? t.opened : t.cannotOpen(String(opened.reason)) }
+  on('command.run', { command: 'lot-quest' }, async $ => {
+    const opened = await $.ui.open({ id: PANE, title: isQuest ? words.pane : t.title })
+    return { text: opened.isPlaced ? (isQuest ? words.opened : t.opened) : t.cannotOpen(String(opened.reason)) }
   })
 
   on('turn.start', async ($, e, next) => {
@@ -218,6 +246,7 @@ export const register: Register = (on, options) => {
       // A new message clears what went wrong on the way to the last answer.
       await quietly(() => update($, board, b => (b.faults === undefined ? b : { ...b, faults: {} })))
       await begin($, { station: 'you', label: t.newMessage, from: 'inbound', status: 'ok' })
+      await adventure($, heroKey, (h, now) => mission(h, now, words))
     }
     return next(e)
   })
@@ -272,6 +301,8 @@ export const register: Register = (on, options) => {
         status: e.isAborted ? 'err' : 'ok',
         ...(e.isAborted ? {} : { mark: 'done' as const }),
       })
+      const isAborted = Boolean(e.isAborted)
+      await adventure($, heroKey, (h, now) => victory(h, isAborted, now, words))
       // An interrupted call never reports back; left alone its row would pulse for the rest of the session.
       await quietly(async () => {
         const now = await $.clock.now()
@@ -285,22 +316,33 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', async ($, e, next) => {
+    // A call that writes a file is the hero at the forge; one that reads is a chest opened.
+    const isForge = ['Edit', 'Write', 'NotebookEdit'].includes(String(e.tool))
+    const isCompanion = e.agentId !== undefined
+    const seen: { station?: StationId; label?: string } = {}
     const id = await quietly(async () => {
-      const seen = classify(e.tool, e as unknown as Record<string, unknown>, setup)
-      return begin($, { ...seen, ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
+      const found = classify(e.tool, e as unknown as Record<string, unknown>, setup)
+      seen.station = found.station
+      seen.label = clean(found.label, 48)
+      return begin($, { ...found, ...(isForge ? { forge: true as const } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
+    const tell = (outcome: 'ok' | 'err' | 'block'): Promise<void> =>
+      adventure($, heroKey, (h, now) => deed(h, seen.station === undefined ? undefined : actOf(seen.station, isForge), seen.label ?? '', outcome, isCompanion, now, words))
     try {
       const ran = await next(e)
       const wasRefused = ran.deny !== undefined || (e.tool_use_id !== undefined && refused.delete(e.tool_use_id))
       const task = wasRefused || ran.isError === true ? undefined : taskOf(ran.result)
       if (task !== undefined) {
         await background($, id, task)
+        await tell('ok')
         return ran
       }
       await finish($, id, wasRefused ? 'block' : ran.isError === true ? 'err' : 'ok')
+      await tell(wasRefused ? 'block' : ran.isError === true ? 'err' : 'ok')
       return ran
     } catch (failure) {
       await finish($, id, 'err')
+      await tell('err')
       throw failure
     }
   })
@@ -363,6 +405,7 @@ export const register: Register = (on, options) => {
       return await next(e)
     } finally {
       await finish($, id, 'ok', await contextOf($))
+      await adventure($, heroKey, (h, now) => rested(h, now, words))
     }
   })
 
@@ -370,6 +413,56 @@ export const register: Register = (on, options) => {
     const state = await read($, board)
     const now = await $.clock.now()
     const { Box, Text } = $.ui.resolve(e)
+
+    if (isQuest) {
+      // The quest: the scene, three lines of who the hero is and what they are at, and the diary, newest first.
+      const me = await read($, hero)
+      const { who, bars, doing } = sheet(me, state, now, words)
+      const head = [
+        <Text mono weight="bold">{who}</Text>,
+        <Text mono size="footnote">{bars}</Text>,
+        <Text mono size="footnote" color="claude">{doing}</Text>,
+      ]
+      const diary = [...me.log].reverse().map(line => (
+        <Text mono size="footnote" color={line.tone === 'gold' ? 'claude' : line.tone === 'bad' ? 'error' : undefined} dimColor={line.tone === 'plain'}>
+          {line.text}
+        </Text>
+      ))
+      const lines = diary.length > 0 ? diary : [<Text dimColor>{words.nothingYet}</Text>]
+
+      if (e.surface === 'terminal') {
+        // A terminal draws no picture: the scene is a grid of cells, two square pixels to a cell.
+        const size = setup.terminalMap ? questSize(e.props.bodyColumns, e.props.scroll.bodyRows) : undefined
+        if (size === undefined) {
+          shown = undefined
+          return (
+            <Box flexDirection="column">
+              {head}
+              {lines}
+            </Box>
+          )
+        }
+        const { Raster } = $.ui.resolve(e)
+        shown = { view: 'quest', size, board: state, at: now, frames: Math.ceil(SETTLE_MS / FRAME_MS) + 2, skipped: 0 }
+        const room = Math.max(3, Math.floor(e.props.scroll.bodyRows) - size.rows - 4)
+        return (
+          <Box flexDirection="column">
+            <Raster key={RASTER} columns={size.columns} rows={size.rows} cells={questCells(paintQuest(state, now, size.columns, size.rows * 2))} />
+            {head}
+            {lines.slice(0, room)}
+          </Box>
+        )
+      }
+
+      const { Svg } = $.ui.resolve(e)
+      return (
+        <Box flexDirection="column">
+          <Svg source={questSvg(paintQuest(state, now, 64, 24))} alt={`${words.pane}. ${doing}`} />
+          {head}
+          {lines}
+        </Box>
+      )
+    }
 
     const rows = foldRows(state.entries).map(({ entry, times, tookMs }) => {
       const isSwitch = entry.mark === 'switch'
@@ -393,7 +486,7 @@ export const register: Register = (on, options) => {
       const size = setup.terminalMap ? termSize(e.props.bodyColumns, e.props.scroll.bodyRows) : undefined
       if (size !== undefined) {
         const { Raster } = $.ui.resolve(e)
-        shown = { size, board: state, at: now, frames: Math.ceil(SETTLE_MS / FRAME_MS) + 2, skipped: 0 }
+        shown = { view: 'map', size, board: state, at: now, frames: Math.ceil(SETTLE_MS / FRAME_MS) + 2, skipped: 0 }
         const room = Math.max(3, Math.floor(e.props.scroll.bodyRows) - size.rows - 2)
         return (
           <Box flexDirection="column">

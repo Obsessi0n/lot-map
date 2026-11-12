@@ -6,15 +6,19 @@ import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, fi
 import { isLively, paint, rowsOf, termSize } from './term'
 import { stringsFor } from './text'
 
+// The fork shows the quest unless told otherwise; these are the map's tests.
+const MAP = { view: 'map' }
+
 const PANE = {
-  plugin: 'lot-map',
+  plugin: 'lot-quest',
   component: 'Pane',
-  requestId: 'lot-map',
+  requestId: 'lot-quest',
   props: { title: 'Map', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
 // Someone's own setup as it stands in settings: Russian labels and a memory of their own.
 const OWN = {
+  view: 'map',
   language: 'ru',
   coreName: 'ДОМ',
   memoryServers: ['recall'],
@@ -181,7 +185,7 @@ test('every language has every word, in a table of its own', () => {
 })
 
 for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichiers   b/content.py'], ['de', 'Dateien    b/content.py'], ['it', 'File      b/content.py'], ['pt', 'Ficheiros b/content.py']] as const) {
-  test(`the pane speaks ${language}, its columns even`, { options: { language } }, async ($, on) => {
+  test(`the pane speaks ${language}, its columns even`, { options: { view: 'map', language } }, async ($, on) => {
     on('clock.now', () => ({ value: 1_000_000 }))
     on('tool.call', () => ({ result: {} }))
     await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
@@ -238,7 +242,7 @@ test('the drawing stays within what Svg accepts at its fullest', () => {
   expect(svg).not.toContain('Infinity')
 })
 
-test('with no options set the map speaks English and shows no record numbers', async ($, on) => {
+test('with no options set the map speaks English and shows no record numbers', { options: MAP }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
   on('tool.call', () => ({ result: {} }))
   on('classic.UserPromptSubmit', () => ({ additionalContext: ['• [#12 excerpt] text of a note'] }))
@@ -260,7 +264,7 @@ test('with no options set the map speaks English and shows no record numbers', a
 
 test('a call shows on the pane, on every surface', { options: OWN }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
-  on('command.register', () => ({ value: { command: 'lot-map' } }))
+  on('command.register', () => ({ value: { command: 'lot-quest' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('tool.call', () => ({ result: {} }))
@@ -326,7 +330,7 @@ test('memory a hook adds shows as numbers, never as its text', { options: OWN },
   await ui.unmount()
 })
 
-test('a broken board never stops the tool', async ($, on) => {
+test('a broken board never stops the tool', { options: MAP }, async ($, on) => {
   on('state.get', () => { throw new Error('no state') })
   on('state.set', () => { throw new Error('no state') })
   on('tool.call', () => ({ result: { ok: true } }))
@@ -367,7 +371,7 @@ test('a model step streams through untouched and shows on the map', { options: O
   await ui.unmount()
 })
 
-test('a broken board never stops a model step', async ($, on) => {
+test('a broken board never stops a model step', { options: MAP }, async ($, on) => {
   on('state.get', () => { throw new Error('no state') })
   on('state.set', () => { throw new Error('no state') })
   on('clock.now', () => { throw new Error('no clock') })
@@ -783,7 +787,7 @@ test('a background task that failed leaves a fault on its station', { options: O
   expect(source.split('font-weight="700"').length - 1).toBe(1)
 })
 
-test('a terminal with room draws the map as a grid of cells over the rows of text', async ($, on) => {
+test('a terminal with room draws the map as a grid of cells over the rows of text', { options: MAP }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
   on('tool.call', () => ({ result: {} }))
   await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
@@ -798,7 +802,7 @@ test('a terminal with room draws the map as a grid of cells over the rows of tex
   await ui.unmount()
 })
 
-test('with terminalMap off a terminal keeps the rows of text alone', { options: { terminalMap: false } }, async ($, on) => {
+test('with terminalMap off a terminal keeps the rows of text alone', { options: { view: 'map', terminalMap: false } }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
   on('tool.call', () => ({ result: {} }))
   await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
@@ -809,7 +813,7 @@ test('with terminalMap off a terminal keeps the rows of text alone', { options: 
   await ui.unmount()
 })
 
-test('a narrow or short pane of a terminal keeps the rows of text alone', async ($, on) => {
+test('a narrow or short pane of a terminal keeps the rows of text alone', { options: MAP }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
   on('tool.call', () => ({ result: {} }))
   await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
@@ -826,7 +830,7 @@ test('a narrow or short pane of a terminal keeps the rows of text alone', async 
 })
 
 for (const language of LANGUAGES) {
-  test(`the terminal's map takes the names of the language ${language}`, { options: { language, coreName: 'ДОМ' } }, async ($, on) => {
+  test(`the terminal's map takes the names of the language ${language}`, { options: { view: 'map', language, coreName: 'ДОМ' } }, async ($, on) => {
     on('clock.now', () => ({ value: 1_000_000 }))
     on('tool.call', () => ({ result: {} }))
     await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })

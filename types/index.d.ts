@@ -20,6 +20,25 @@ export type Entry = {
   task?: string
   /** A moment the map marks: the model changed, or the answer is ready. */
   mark?: 'switch' | 'done'
+  /** The call writes a file rather than reads one: in the quest the hero forges instead of opening a chest. */
+  forge?: true
+}
+
+/** A line of the hero's diary. It holds names, as a row of the map does, never content. */
+export type HeroLine = { at: number; text: string; tone: 'good' | 'bad' | 'gold' | 'plain' }
+
+/** The hero of the quest. All but the diary is kept between sessions, one hero to a folder. */
+export type Hero = {
+  xp: number
+  gold: number
+  hp: number
+  kills: number
+  chests: number
+  forged: number
+  bosses: number
+  falls: number
+  loot: Record<string, number>
+  log: HeroLine[]
 }
 
 export type Board = {
@@ -41,6 +60,6 @@ export type Board = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'lot-map': { board: Shaped<Board> }
+    'lot-quest': { board: Shaped<Board>; hero: Shaped<Hero> }
   }
 }

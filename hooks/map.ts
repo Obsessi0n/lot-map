@@ -47,6 +47,8 @@ export type Setup = {
   layout: 'you-top' | 'you-bottom'
   /** Whether a terminal, which draws no picture, gets the map drawn with braille dots where its pane has the room. */
   terminalMap: boolean
+  /** What the pane shows: the quest, a dungeon crawl read off the same session, or the map as upstream draws it. */
+  view: 'quest' | 'map'
 }
 
 const list = (v: unknown): string[] =>
@@ -74,6 +76,7 @@ export function setupFrom(options: Readonly<Record<string, unknown>> = {}): Setu
     colors: colorsFrom(options.colors),
     layout: options.layout === 'you-bottom' ? 'you-bottom' : 'you-top',
     terminalMap: options.terminalMap !== false,
+    view: options.view === 'map' ? 'map' : 'quest',
   }
 }
 

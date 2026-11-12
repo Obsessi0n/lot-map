@@ -1,3 +1,35 @@
+# lot-quest
+
+A fork of [lot-map](https://github.com/alexeyw/lot-map) by Aleksei Volodin that reads the same session as a dungeon crawl. A pixel hero walks while the model thinks and meets something at every tool call:
+
+| The session | The quest |
+| --- | --- |
+| your message | a quest taken at the tavern |
+| a file read or searched | a chest opened |
+| a file written or edited | the forge |
+| a shell command | a fight with a monster |
+| the network, an MCP server, the browser | a raven sent out |
+| memory | the old tome |
+| a subagent | a companion who walks behind the hero |
+| a skill | a scroll |
+| an error | a blow: a heart lost, and at none the hero faints until the next quest |
+| a refused call | a locked door |
+| context filling up | stamina running down; a compaction is a rest by the fire |
+| the answer | the boss beaten: experience, gold, a piece of loot and a heart back |
+
+Experience, gold and loot are kept between sessions, one hero to a folder. In a terminal the scene is drawn with half-block characters, two square pixels to a cell, and moves while something happens; the desktop app and VS Code get the same picture as a drawing. The quest speaks English and Portuguese (`language` set to `pt`).
+
+Everything lot-map does is still here: set `view` to `map` for the map of stations. What follows is lot-map's own README; where it says `lot-map`, the plugin and its command are `lot-quest` in this fork.
+
+To install from a clone of this branch:
+
+```bash
+claude plugin marketplace add <the clone's folder>
+claude plugin install lot-quest@lot-quest
+```
+
+---
+
 # lot-map
 
 A mod for Claude Code: a live map of the work, in a pane beside the chat. Every tool call, model step, hook and skill sends a pulse from the centre to its station, so you see memory, files, shell, web and agents at work instead of reading a list of commands.
