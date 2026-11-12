@@ -2,7 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import type { Board } from '../types'
 import type { Entry } from '../types'
-import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
+import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
+import { hasGlyph } from './raster'
 import { stringsFor } from './text'
 
 const PANE = {
@@ -242,6 +243,12 @@ test('every language has every word, in a table of its own', () => {
   }
   expect(new Set(LANGUAGES.map(language => stringsFor(language).title)).size).toBe(LANGUAGES.length)
   expect(stringsFor('constructor').title).toBe(en.title)
+})
+
+test('the terminal picture\'s font has every letter the map writes, in every language', () => {
+  const words = LANGUAGES.flatMap(language => Object.values(stringsFor(language).stations))
+  const missing = [...new Set([...words.join(''), ...'0123456789%×↓→·…◆+ abcdefghijklmnopqrstuvwxyz.CLAUDE'])].filter(ch => !hasGlyph(ch))
+  expect(missing).toEqual([])
 })
 
 for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichiers   b/content.py'], ['de', 'Dateien    b/content.py'], ['it', 'File      b/content.py'], ['pt', 'Ficheiros b/content.py']] as const) {
@@ -604,7 +611,8 @@ test('a subagent circles the agents station until its loop ends, and its hanging
   await hanging.next()
 
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /идёт/ }))?.text).toContain('субагент')
+  // The row is running: its mark says so, and its time column holds the word, which the second mount below sees gone.
+  expect(await ui.find({ type: 'Text', text: /^● .*субагент/ })).toBeDefined()
   expect((await ui.find({ type: 'Svg' }))?.props.source).toContain('animateTransform')
   await ui.unmount()
 
@@ -647,8 +655,14 @@ test('the context window shows as soon as the engine tells how full it is', { op
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.source).toContain('>37%<')
-  expect((await ui.find({ type: 'Text', text: /контекст 37%/ }))?.text).toContain('Сейчас ничего не выполняется')
+  // Beside the drawing the line of now says only what runs: the drawing has the figure and the model already.
+  expect((await ui.find({ type: 'Text', text: /Ожидание/ }))?.text).toBe('Ожидание')
   await ui.unmount()
+
+  // A terminal has no drawing, so the figure and the model stand at the right of that line, apart from the words.
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await term.find({ type: 'Text', text: /^37%/ }))?.text).toBe('37% · opus 5.5')
+  await term.unmount()
 })
 
 test('the ring can be turned so that the person is at the bottom and the network at the top', () => {
@@ -873,4 +887,105 @@ test('a typed slash command keeps a background task that is older than the rows 
   const after = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await after.find({ type: 'Text', text: /идёт/ })).toBeUndefined()
   await after.unmount()
+})
+
+test('with reduced motion nothing flies, spreads or spins, and a call still shows', () => {
+  const now = 1_000_000
+  const board: Board = {
+    entries: [
+      { id: 'a', station: 'files', label: 'a.py', from: 'core', startedAt: now - 5000, endedAt: now - 4000, status: 'ok' },
+      { id: 'b', station: 'shell', label: 'make', from: 'core', startedAt: now - 300, status: 'run' },
+      { id: 'c', station: 'web', label: 'x.y', from: 'core', startedAt: now - 200, endedAt: now - 100, status: 'err' },
+      { id: 'd', station: 'you', label: 'done', from: 'core', startedAt: now - 50, endedAt: now - 50, status: 'ok', mark: 'done' },
+    ],
+    counts: { files: 1, shell: 1, web: 1 },
+    agents: ['x', 'y'],
+    model: 'claude-opus-5-5',
+    switchedAt: now - 500,
+  }
+  const full = drawMap(board, now, setupFrom())
+  const still = drawMap(board, now, setupFrom({ motion: 'reduced' }))
+
+  // The default is the drawing as it was.
+  expect(full).toContain('<animateMotion')
+  expect(full).toContain('<animateTransform')
+  expect(full).toContain('attributeName="r"')
+
+  expect(still).not.toContain('<animateMotion')
+  expect(still).not.toContain('<animateTransform')
+  expect(still).not.toContain('attributeName="r"')
+  // What is left changes opacity, or is a clock hand; nothing repeats but the minute hand.
+  const kinds = new Set([...still.matchAll(/<animate attributeName="([^"]+)"/g)].map(m => m[1]))
+  expect([...kinds].sort()).toEqual(['opacity', 'stroke-dashoffset'])
+  expect(still.split('repeatCount="indefinite"').length - 1).toBe(1)
+  // The call is still there to see: its spoke flashes, the running station wears its ring, each subagent has a place.
+  expect(still).toContain('values=".75;0"')
+  expect(still.split('transform="rotate(').length - 1).toBe(full.split('transform="rotate(').length - 1 + 2)
+  expect(setupFrom({ motion: 'none' }).motion).toBe('full')
+})
+
+test('the idle status line shows the model name when one is known', () => {
+  const t = stringsFor('en')
+  const empty: Board = { entries: [], counts: {} }
+  const withModel: Board = { ...empty, model: 'claude-sonnet-4-5-20250514' }
+  const withContext: Board = { ...withModel, context: 42 }
+  expect(describeNow(empty, t)).toBe(t.idle)
+  expect(describeNow(withModel, t)).toBe(`${t.idle} · ${shortModel('claude-sonnet-4-5-20250514')}`)
+  expect(describeNow(withContext, t)).toContain(shortModel('claude-sonnet-4-5-20250514'))
+  expect(describeNow(withContext, t)).toContain('42%')
+})
+
+test('a row is one line: its words are cut at the edge, its time has a column, and a long one opens on a press', { options: { textSize: 'body' } }, async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.call', () => ({ result: {} }))
+  const long = 'Run the plugin tests and then the validator on the whole folder'
+  await $.tool.call({ tool: 'Bash', command: 'make', description: long })
+  await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const row = await ui.find({ type: 'Text', text: /Run the plugin tests/ })
+    expect(row?.text).toContain(long)
+    expect(row?.props.wrap).toBe('truncate-end')
+    expect(row?.props.size).toBe('body')
+    // A short label has nothing to open; the long one has one control, and a press turns its row to wrapping and back.
+    const controls = await ui.findAll({ type: 'Button' })
+    expect(controls.length).toBe(1)
+    const key = String(controls[0]?.props.key)
+    await ui.press({ key })
+    expect((await ui.find({ type: 'Text', text: /Run the plugin tests/ }))?.props.wrap).toBe('wrap')
+    expect((await ui.find({ type: 'Text', text: /content\.py/ }))?.props.wrap).toBe('truncate-end')
+    await ui.press({ key })
+    expect((await ui.find({ type: 'Text', text: /Run the plugin tests/ }))?.props.wrap).toBe('truncate-end')
+    await ui.unmount()
+  }
+  expect(setupFrom({ textSize: 'huge' }).textSize).toBe('footnote')
+})
+
+test('the time stays on a row\'s first line, a moment holds a dash, and the answer row says how long the turn took', { options: OWN }, async ($, on) => {
+  let clock = 1_000_000
+  on('clock.now', () => ({ value: clock }))
+  on('turn.complete', () => ({ text: '' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }) as never)
+  await $.turn.start({ text: 'привет', turnId: 't1' } as never)
+  clock += 42_000
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^42([.,]0)? с$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^—$/ })).toBeDefined()
+  const rows = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexDirection === 'row')
+  expect(rows.length > 0 && rows.every(b => b.props.alignItems === 'flex-start')).toBe(true)
+  await ui.unmount()
+})
+
+test('the line of now names the model once: not at its right while a model step is what runs', () => {
+  const t = stringsFor('en')
+  const step: Entry = { id: 's', station: 'model', label: 'opus 5.5 · step 1', from: 'core', startedAt: 1, status: 'run' }
+  const call: Entry = { id: 'c', station: 'shell', label: 'make', from: 'core', startedAt: 2, status: 'run' }
+  const board: Board = { entries: [], counts: {}, model: 'claude-opus-5-5', context: 8 }
+  expect(nowParts(board, t)).toEqual({ what: t.idle, meter: '8% · opus 5.5' })
+  expect(nowParts({ ...board, entries: [step] }, t)).toEqual({ what: 'Model: opus 5.5 · step 1', meter: '8%' })
+  expect(nowParts({ ...board, entries: [step, call] }, t).meter).toBe('8% · opus 5.5')
+  expect(stringsFor('ru').idle).toBe('Ожидание')
 })
