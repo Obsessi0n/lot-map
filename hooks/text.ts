@@ -334,6 +334,56 @@ const it: Strings = {
   minutes: (m, s) => `${m} min ${s} s`,
 }
 
-const TABLES = new Map<unknown, Strings>([['en', en], ['ru', ru], ['es', es], ['fr', fr], ['de', de], ['it', it]])
+// European Portuguese.
+const pt: Strings = {
+  title: 'Mapa de trabalho',
+  command: 'Abrir o mapa de trabalho ao lado do chat',
+  opened: 'Mapa de trabalho aberto.',
+  cannotOpen: reason => `De momento não há onde mostrar o mapa: ${reason}`,
+  stations: {
+    you: 'Tu',
+    model: 'Modelo',
+    memory: 'Memória',
+    files: 'Ficheiros',
+    shell: 'Terminal',
+    web: 'Rede',
+    browser: 'Navegador',
+    agents: 'Agentes',
+    skills: 'Skills',
+    hooks: 'Hooks',
+  },
+  newMessage: 'nova mensagem',
+  answerReady: 'resposta pronta',
+  turnAborted: 'turno interrompido',
+  step: n => `passo ${n}`,
+  subagent: 'subagente',
+  compacting: 'a compactar o contexto',
+  addedContext: when => `adicionou contexto ${when}`,
+  addedMemory: when => `adicionou memória ${when}`,
+  toMessage: 'à mensagem',
+  atStart: 'no início da sessão',
+  records: (n, shown) => `${n} registo${n === 1 ? '' : 's'}: ${shown}`,
+  stopped: tool => `travou ${tool}`,
+  askedPermission: tool => `pediu permissão: ${tool}`,
+  checkBefore: tool => `verificação antes de ${tool}`,
+  running: 'em curso',
+  nothingYet: 'Ainda nada.',
+  noCounts: 'Ainda sem contagens.',
+  idle: 'Nada em execução.',
+  context: 'contexto',
+  andMore: n => ` e mais ${n}`,
+  webSearch: 'pesquisa na web',
+  artifact: 'artefacto',
+  workflow: 'workflow',
+  skill: 'skill',
+  loadingTools: 'a carregar ferramentas',
+  questionForYou: 'pergunta para ti',
+  fileForYou: 'ficheiro para ti',
+  ms: n => `${n} ms`,
+  seconds: s => `${s.replace('.', ',')} s`,
+  minutes: (m, s) => `${m} min ${s} s`,
+}
+
+const TABLES = new Map<unknown, Strings>([['en', en], ['ru', ru], ['es', es], ['fr', fr], ['de', de], ['it', it], ['pt', pt]])
 
 export const stringsFor = (language: unknown): Strings => TABLES.get(language) ?? en
