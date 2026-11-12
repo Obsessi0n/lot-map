@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
+import { isLively, paint, rowsOf, termSize } from './term'
 import { stringsFor } from './text'
 
 const PANE = {
@@ -780,4 +781,76 @@ test('a background task that failed leaves a fault on its station', { options: O
   const source = String((await ui.find({ type: 'Svg' }))?.props.source)
   await ui.unmount()
   expect(source.split('font-weight="700"').length - 1).toBe(1)
+})
+
+test('a terminal with room draws the map as a grid of cells over the rows of text', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.call', () => ({ result: {} }))
+  await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const raster = await ui.find({ type: 'Raster' })
+  expect(raster?.props.columns).toBe(60)
+  expect(raster?.props.rows).toBe(21)
+  // Sixteen characters of base64 a cell: three u32, twelve bytes.
+  expect(String(raster?.props.cells).length).toBe(60 * 21 * 16)
+  expect((await ui.find({ type: 'Text', text: /b\/content\.py/ }))?.text).toContain('Files')
+  await ui.unmount()
+})
+
+test('with terminalMap off a terminal keeps the rows of text alone', { options: { terminalMap: false } }, async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.call', () => ({ result: {} }))
+  await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /^Files 1$/ }))?.text).toBe('Files 1')
+  await ui.unmount()
+})
+
+test('a narrow or short pane of a terminal keeps the rows of text alone', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.call', () => ({ result: {} }))
+  await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+
+  for (const props of [{ ...PANE.props, bodyColumns: 40 }, { ...PANE.props, scroll: { offset: 0, bodyRows: 12 } }]) {
+    const ui = await $.ui.mount({ ...PANE, props, surface: 'terminal' })
+    expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+    expect((await ui.find({ type: 'Text', text: /^Files 1$/ }))?.text).toBe('Files 1')
+    await ui.unmount()
+  }
+  expect(termSize(85, 50)).toEqual({ columns: 76, rows: 21 })
+  expect(termSize(49, 50)).toBeUndefined()
+  expect(termSize(60, 24)).toBeUndefined()
+})
+
+for (const language of LANGUAGES) {
+  test(`the terminal's map takes the names of the language ${language}`, { options: { language, coreName: 'ДОМ' } }, async ($, on) => {
+    on('clock.now', () => ({ value: 1_000_000 }))
+    on('tool.call', () => ({ result: {} }))
+    await $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ type: 'Raster' }))?.props.columns).toBe(60)
+    await ui.unmount()
+  })
+}
+
+test('the terminal map names every station, counts what was used, and comes to rest when nothing moves', () => {
+  const setup = setupFrom()
+  const running: Entry = { id: 'a', station: 'shell', label: 'x', from: 'core', startedAt: 1000, status: 'run' }
+  const board: Board = { entries: [running], counts: { shell: 6, files: 9 }, faults: { shell: 2 }, model: 'claude-opus-5-5', context: 41 }
+  const rows = rowsOf(paint(board, 1200, setup, 60, 21)).join('\n')
+  for (const name of Object.values(setup.t.stations)) expect(rows).toContain(name)
+  expect(rows).toContain('Shell 6 !2')
+  expect(rows).toContain('Files 9')
+  expect(rows).toContain('CLAUDE')
+  expect(rows).toContain('opus 5.5')
+  expect(rows).toContain('41%')
+  // The lines and the nodes are braille dots.
+  expect(rows).toMatch(/[⠁-⣿]/)
+
+  expect(isLively(board, 1200)).toBe(true)
+  expect(isLively({ ...board, entries: [{ ...running, status: 'ok', endedAt: 1100 }] }, 1100 + 60_000)).toBe(false)
 })

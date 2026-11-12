@@ -121,6 +121,12 @@
       ],
       "default": "you-top",
       "description": "Where you are on the map: at the top, or at the bottom with the network and the browser at the top."
+    },
+    "terminalMap": {
+      "type": "boolean",
+      "title": "Map in a terminal",
+      "default": true,
+      "description": "A terminal draws no picture, so where the pane has the room the map is drawn there with braille dots and letters. Turn off to keep only the rows of text."
     }
   }
 }

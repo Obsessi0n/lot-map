@@ -4,8 +4,13 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Board, Entry, StationId, Status } from '../types'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
+import { SETTLE_MS, drawTermMap, isLively, termSize } from './term'
+import type { TermSize } from './term'
 
 const PANE = 'lot-map'
+/** The terminal's map: its key in the pane's drawing, and how often it is repainted while something on it moves. */
+const RASTER = 'map'
+const FRAME_MS = 125
 const KEEP = 80
 const CREW = 12
 
@@ -116,6 +121,20 @@ async function settle($: EngineInterface, task: string, status: Status): Promise
   })
 }
 
+/** What the terminal's map was last drawn from, and how many frames it still has to move. */
+type Shown = { size: TermSize; board: Board; at: number; frames: number; skipped: number }
+
+/** One frame of the terminal's map between two redraws: the same board at the time it now is. False when the map is not there to repaint. */
+async function animate($: EngineInterface, live: Shown, setup: Setup): Promise<boolean> {
+  const now = await $.clock.now()
+  // A call still running keeps the map moving; otherwise it comes to rest a few seconds after the last change.
+  if (isLively(live.board, now)) live.frames = Math.max(live.frames, 2)
+  // Long after the last change only a running node beats: a third of the frames is enough for that.
+  if (now - live.at > SETTLE_MS && live.skipped++ % 3 !== 0) return true
+  const answer = await $.ui.blit({ requestId: PANE, key: RASTER, cells: drawTermMap(live.board, now, setup, live.size.columns, live.size.rows), ...live.size })
+  return answer.deny === undefined
+}
+
 /** How full the context window is, as the status line has it; costs nothing. */
 async function contextOf($: EngineInterface): Promise<Pick<Board, 'context'>> {
   const percent = await quietly(async () => (await $.session.usage()).context.percent)
@@ -157,7 +176,24 @@ export const register: Register = (on, options) => {
   let lastModel: string | undefined
   let modelKey = 'model'
 
+  // What the terminal's map was last drawn from. A redraw comes when the board changes; a pulse or a glow moves in
+  // between, so a timer repaints the same board at the time it then is. Lost with a reload: the next redraw sets it again.
+  let shown: Shown | undefined
+  let timer: { cancel: () => void } | undefined
+
   on('session.start', async ($, e, next) => {
+    await quietly(async () => {
+      timer?.cancel()
+      timer = $.clock.every(FRAME_MS, () => {
+        const live = shown
+        if (live === undefined || live.frames <= 0) return
+        live.frames--
+        void quietly(async () => {
+          // Refused: the pane is closed or behind another one. The next redraw starts the frames again.
+          if (!(await animate($, live, setup)) && shown === live) shown = undefined
+        })
+      })
+    })
     await quietly(() => $.command.register({ name: 'lot-map', description: t.command }))
     void quietly(() => $.ui.open({ id: PANE, title: t.title }))
     await quietly(async () => {
@@ -352,6 +388,22 @@ export const register: Register = (on, options) => {
     const current = <Text mono size="footnote">{describeNow(state, t)}</Text>
 
     if (e.surface === 'terminal') {
+      // A terminal draws no picture, so where the pane has the room the map is a grid of cells: dots for the lines and
+      // the nodes, letters for the names. A narrow or short pane keeps the rows of text alone.
+      const size = setup.terminalMap ? termSize(e.props.bodyColumns, e.props.scroll.bodyRows) : undefined
+      if (size !== undefined) {
+        const { Raster } = $.ui.resolve(e)
+        shown = { size, board: state, at: now, frames: Math.ceil(SETTLE_MS / FRAME_MS) + 2, skipped: 0 }
+        const room = Math.max(3, Math.floor(e.props.scroll.bodyRows) - size.rows - 2)
+        return (
+          <Box flexDirection="column">
+            <Raster key={RASTER} columns={size.columns} rows={size.rows} cells={drawTermMap(state, now, setup, size.columns, size.rows)} />
+            {current}
+            {feed.slice(0, room)}
+          </Box>
+        )
+      }
+      shown = undefined
       const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}`).join(' · ')
       return (
         <Box flexDirection="column">

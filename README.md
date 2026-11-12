@@ -22,7 +22,7 @@ claude plugin install lot-map --marketplace alexeyw/lot-map
 
 In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `alexeyw/lot-map`, then **Add plugin**.
 
-The pane opens by itself when a session starts. In a terminal it needs at least 144 columns and draws text only; otherwise type `/lot-map`. Built and tested on Claude Code 2.1.321 on macOS; users report it working on Windows as well.
+The pane opens by itself when a session starts. In a terminal it opens by itself in a window of at least 144 columns; in a narrower one type `/lot-map`. A terminal draws no picture, so there the map is [drawn with braille dots](#in-a-terminal). Built and tested on Claude Code 2.1.321 on macOS; users report it working on Windows as well.
 
 ## Updating
 
@@ -82,6 +82,45 @@ Below the map are the current action with the context percentage, and the last 1
 | --- | --- | --- |
 | ![A change of model](docs/map-switch.png) | ![After the answer](docs/map-after.png) | ![Light colours](docs/map-light.png) |
 
+## In a terminal
+
+Claude Code gives a mod a picture only in the desktop app and in VS Code. In a terminal the pane holds the same map as a grid of cells: braille dots for the spokes and the nodes, letters for the names, with the rows of calls under it.
+
+```text
+                             You 1
+                             ⡔⢉⡉⢢
+             Hooks 2         ⠣⣈⣁⠜         Model 14
+              ⡔⢉⡉⢢             ⡄            ⡔⢉⡉⢢
+              ⠣⣈⣁⠜             ⡇            ⠣⣈⣁⠜
+                  ⠈⠢⣀          ⡇         ⢀⣠⠮⠂
+    Skills           ⠣⡀        ⡇       ⢀⣠⠗⠁        Memory 5
+     ⡔⠉⠉⢢             ⠈⠒⢄      ⠇     ⢀⡽⠏⠁            ⡔⢉⡉⢢
+     ⠣⣀⣀⠜ ⠒⠤⠤⢄⣀⣀         ⣁⡠⠤⠒⠒⠒⠒⠒⠒⠢⠤⣀⡋        ⢀⣀⣀⠤⠤⠔⠂⠣⣈⣁⠜
+                ⠉⠉⠒⠒⠢⠄⢀⠔⠋     56%    ⠈⠓⢄ ⠤⠒⠒⠊⠉⠁
+                      ⡏     CLAUDE     ⠈⡇
+    ⣠⠄⠤⠤⢄         ⣀⣀⡠⠄⠙⢄⡀  fable 5.2  ⣀⠜⠁⣤⣀⣀⡀
+    ⡃⣴⣿⣿⣦⢱⣀⠤⠤⠔⠒⠒⠉⠉      ⠉⠒⠢⠤⣀⣀⣀⣀⣀⣀⡠⠤⠒⠊⠁   ⠉⠉⠚⠛⠳⠶⠶⣤⣤⣄⡀⡔⢉⡉⢢
+    ⡃⠻⣿⣿⠟⡰             ⣀⠔⠁     ⡄     ⠑⢄⡀           ⠈⠁⠣⣈⣁⠜
+   Agents 1          ⡠⠊        ⡇       ⠽⠣⡀          Files 9
+                   ⡠⠒⠁         ⡇         ⠑⠢⣀⠄⠤⠤⢄
+              ⡔⠉⠉⢢⠈            ⡇           ⡋⣴⣿⣿⣦⢱
+              ⠣⣀⣀⠜             ⠇           ⡃⠻⣿⣿⠟⡰
+             Browser         ⡔⢉⡉⢢          Shell 6
+                             ⠣⣈⣁⠜
+                         Network 3 !1
+```
+
+It reads as the drawing does, with what cells can carry:
+
+- **Nodes.** An empty ring was not used yet; a ring with a dot was; a full one is at work now and beats, and a station that just finished stays bright for a moment. Red is an error or a refusal, and `!1` beside the name counts them until your next message; `x3` is how many calls run there at once.
+- **Spokes.** A spoke takes colour with the first call and grows a second line with use. A pulse flies out along it when a call starts and back when it ends; what a hook brought unasked flies in.
+- **The core.** Its outline is the context window, filling clockwise from the top, with the percentage over the name and the model under it. One ring leaves it when the answer is ready.
+- **Subagents.** Each one still at work circles the Agents station as a dot.
+
+The words take the terminal's own colour, so they read on a dark and on a light one; `theme` set to `light` darkens the rest, and `colors` holds here too. There is no route between the stations: one cell holds one colour, and two lines crossing would repaint each other.
+
+The map needs a pane body of at least 50 columns and 25 rows, and takes up to 76 by 21; a smaller pane keeps the rows of text. It moves only while something on it does, about eight frames a second, and is still at rest. Set `terminalMap` to `false` to keep only the rows of text.
+
 ## Options
 
 The install offers them on a screen. Later, use `/config` in a terminal or `claude plugin configure`, then restart the session.
@@ -101,6 +140,7 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | `background` | `solid` | the map's own background, or `transparent`, which lets the pane behind it show through. The rim around the labels keeps the background's colour, so on a surface of another shade it shows as a faint halo |
 | `colors` | none | colours of your own, each as `name=#rrggbb`; see [Colours of your own](#colours-of-your-own) |
 | `layout` | `you-top` | where you are on the map: `you-top`, or `you-bottom`, which turns the ring half a turn so that you are at the bottom and the network and the browser at the top |
+| `terminalMap` | `true` | in a terminal, draw the map with braille dots where the pane has the room; `false` leaves the rows of text and one line of counts |
 
 For example, Russian labels and your own memory server:
 

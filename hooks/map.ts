@@ -45,6 +45,8 @@ export type Setup = {
   colors: Partial<Palette>
   /** Who sits at the top of the ring: the person, or the network with the person at the bottom. */
   layout: 'you-top' | 'you-bottom'
+  /** Whether a terminal, which draws no picture, gets the map drawn with braille dots where its pane has the room. */
+  terminalMap: boolean
 }
 
 const list = (v: unknown): string[] =>
@@ -71,6 +73,7 @@ export function setupFrom(options: Readonly<Record<string, unknown>> = {}): Setu
     background: options.background === 'transparent' ? 'transparent' : 'solid',
     colors: colorsFrom(options.colors),
     layout: options.layout === 'you-bottom' ? 'you-bottom' : 'you-top',
+    terminalMap: options.terminalMap !== false,
   }
 }
 
