@@ -112,8 +112,69 @@ test('a command behind a wrapper is read as the command it runs', () => {
   expect(classify('Bash', { command: 'timeout 30 recall memory journal' }, SETUP)).toEqual({ station: 'memory', label: 'memory' })
 })
 
+test('built-in tools land by what they are for, labelled by their name alone', () => {
+  // Every input carries words of its own: none of them may reach the label.
+  const content = { subject: 'private', description: 'private', prompt: 'private', plan: 'private', query: 'private' }
+  const seen = (tool: string) => {
+    const { station, label } = classify(tool, content, STRANGER)
+    return `${station} ${label}`
+  }
+
+  for (const tool of [
+    'TaskCreate',
+    'TaskUpdate',
+    'TaskList',
+    'TaskGet',
+    'TodoWrite',
+    'EnterPlanMode',
+    'ExitPlanMode',
+    'PushNotification',
+    'ReportFindings',
+  ]) expect(seen(tool)).toBe(`you ${tool}`)
+
+  for (const tool of [
+    'CronCreate',
+    'CronDelete',
+    'CronList',
+    'ScheduleWakeup',
+    'RemoteTrigger',
+    'ListAgents',
+  ]) expect(seen(tool)).toBe(`agents ${tool}`)
+
+  for (const tool of [
+    'ListSkills',
+    'SearchSkills',
+    'SuggestSkills',
+    'ListPlugins',
+    'SearchPlugins',
+    'SuggestPluginInstall',
+  ]) expect(seen(tool)).toBe(`skills ${tool}`)
+
+  for (const tool of [
+    'ArtifactComments',
+    'ArtifactData',
+    'SendToProject',
+    'SendToProjectContext',
+  ]) expect(seen(tool)).toBe(`web ${tool}`)
+
+  // They work with git: Shell, as before.
+  for (const tool of [
+    'EnterWorktree',
+    'ExitWorktree',
+  ]) expect(seen(tool)).toBe(`shell ${tool}`)
+})
+
 test('an MCP name with doubled underscores reads with single spaces', () => {
   expect(classify('mcp__my__server__tool', {}, STRANGER).label).toBe('my: server tool')
+})
+
+test('the browser reached from a cloud session lands on Browser, with a label like the local one', () => {
+  const seen = (tool: string, input: Record<string, unknown>) => classify(tool, input, STRANGER)
+  expect(seen('mcp__remote-devices__Claude_Browser__navigate', { url: 'https://user:private@a.b/x?q=1' })).toEqual({ station: 'browser', label: 'a.b' })
+  expect(seen('mcp__remote-devices__Claude_Browser__get_page_text', {})).toEqual({ station: 'browser', label: 'get page text' })
+  expect(seen('mcp__remote-devices__Claude_Browser__computer', { action: 'type', text: 'private' })).toEqual({ station: 'browser', label: 'computer' })
+  // Only the browser: the server's other tools stay where they were.
+  expect(seen('mcp__remote-devices__computer_screenshot', {}).station).toBe('web')
 })
 
 test('out of the box, memory is only what every install has', () => {
@@ -656,7 +717,10 @@ test('the context window shows as soon as the engine tells how full it is', { op
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.source).toContain('>37%<')
   // Beside the drawing the line of now says only what runs: the drawing has the figure and the model already.
-  expect((await ui.find({ type: 'Text', text: /Ожидание/ }))?.text).toBe('Ожидание')
+  const idle = await ui.find({ type: 'Text', text: /Ожидание/ })
+  expect(idle?.text).toBe('Ожидание')
+  // In the theme's text colour, not the terminal's default, which a light terminal makes black on a dark pane.
+  expect(idle?.props.color).toBe('text')
   await ui.unmount()
 
   // A terminal has no drawing, so the figure and the model stand at the right of that line, apart from the words.
@@ -989,3 +1053,79 @@ test('the line of now names the model once: not at its right while a model step 
   expect(nowParts({ ...board, entries: [step, call] }, t).meter).toBe('8% · opus 5.5')
   expect(stringsFor('ru').idle).toBe('Ожидание')
 })
+
+/** The plugin's store, kept in memory as the engine keeps it in a file. */
+function fakeStore(on: (pattern: never, hook: never) => void): Map<string, unknown> {
+  const kept = new Map<string, unknown>()
+  const hook = (pattern: string, fn: (e: never) => unknown) => on(pattern as never, ((_: unknown, e: never) => fn(e)) as never)
+  hook('store.get', (e: { key: string }) => ({ value: kept.get(e.key) }))
+  hook('store.set', (e: { key: string; value: unknown }) => {
+    kept.set(e.key, e.value)
+    return { value: undefined }
+  })
+  return kept
+}
+
+test('on vscode the zoom buttons share the line of now, and the desktop pane has none', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await desktop.findAll({ type: 'Button' })).length).toBe(0)
+  await desktop.unmount()
+  const editor = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect((await editor.findAll({ type: 'Button' })).map(b => b.props.label)).toEqual(['Zoom out', 'Zoom in', 'Hide map'])
+  // One row holds the line of now and the buttons: they take no row of their own.
+  const line = (await editor.findAll({ type: 'Box' })).find(b => b.props.flexDirection === 'row' && /Nothing yet|Nothing is running/.test(b.text ?? '') && /Zoom out/.test(b.text ?? ''))
+  expect(line).toBeDefined()
+  expect((await editor.findAll({ type: 'Box' })).some(b => b.props.position === 'absolute')).toBe(false)
+  await editor.unmount()
+})
+
+test('the zoom buttons draw the map smaller or larger in the editor, and the next session keeps it', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('command.register', () => ({ value: { command: 'lot-map' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const kept = fakeStore(on as never)
+  const width = async (ui: { find: (q: { type: 'Svg' }) => Promise<{ props: Record<string, unknown> } | undefined> }) => (await ui.find({ type: 'Svg' }))?.props.width
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await width(ui)).toBeUndefined()
+  await ui.press({ key: 'zoom-in' })
+  expect(await width(ui)).toBeUndefined()
+  await ui.press({ key: 'zoom-out' })
+  await ui.press({ key: 'zoom-out' })
+  expect(await width(ui)).toBe(340)
+  expect((await ui.find({ type: 'Svg' }))?.props.height).toBe(Math.round(340 * 430 / 460))
+  for (let i = 0; i < 10; i++) await ui.press({ key: 'zoom-out' })
+  expect(await width(ui)).toBe(160)
+  await ui.press({ key: 'zoom-in' })
+  expect(kept.get('mapZoom')).toBe(200)
+  await ui.unmount()
+
+  // The desktop draws the map as it always has, whatever the editor was zoomed to.
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await width(desktop)).toBeUndefined()
+  await desktop.unmount()
+
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  const again = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await width(again)).toBe(200)
+  await again.unmount()
+})
+
+test('minimized, the vscode pane is one line and a press restores the map', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const kept = fakeStore(on as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'hide' })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.props.label)).toEqual(['Show map'])
+  expect(kept.get('paneMin')).toBe(true)
+  await ui.press({ key: 'show' })
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  expect(kept.get('paneMin')).toBe(false)
+  await ui.unmount()
+})
+
+

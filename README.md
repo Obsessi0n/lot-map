@@ -48,15 +48,15 @@ What each version changed is in [CHANGELOG.md](CHANGELOG.md).
 
 | Station | When |
 | --- | --- |
-| You | your messages, questions and files sent to you |
+| You | your messages, questions and files sent to you, the task list and the plan |
 | Model | each model request, context compaction |
 | Memory | Claude Code's memory folder, plus whatever you name in the options |
 | Files | Read, Write, Edit, Grep, Glob, and shell commands that work on files and nothing else: they read, search, move, delete or edit in place (`cat`, `grep`, `mv`, `rm`, `sed`, `tee`, `find … -delete`) |
 | Shell | every other shell command |
 | Network | web fetch and search, MCP servers, and shell commands known to reach the network: `curl`, `gh`, `ssh`, `rsync`, `git push`, `npm install`, `docker pull` and the like, also inside `$(…)` |
 | Browser | browser tools |
-| Agents | subagents and workflows; their own calls start from this station |
-| Skills | skills and tool search |
+| Agents | subagents, workflows and schedules; their own calls start from this station |
+| Skills | skills, tool search, and the skill and plugin catalogue |
 | Hooks | settings hooks that refuse a call, ask for permission, add context or take a moment |
 
 On Windows the PowerShell tool is read the same way as Bash, with PowerShell's own names: `Get-Content` and `Select-String` light Files, `Invoke-WebRequest` lights Network. A program run by its full path is read by its name, also from a quoted path with a space, and `CURL.EXE` is `curl`.
@@ -93,13 +93,17 @@ Each row is one line. Its words are cut at the pane's edge; its time stands in a
 
 ## In a terminal
 
-A terminal shows the rows alone. With `terminalView` set to `picture`, a terminal that shows pictures, such as iTerm2 3.5 and later, kitty or Ghostty, gets the map as a picture above the rows, moving as it does in the desktop app. Claude Code must draw in fullscreen, as it does unless `CLAUDE_CODE_NO_FLICKER=0` is set; inside tmux, set `allow-passthrough on` and `focus-events on`. Any other terminal shows the rows alone, as before, and so does a pane narrower than 24 columns.
+A terminal shows the rows alone. With `terminalView` set to `picture`, a terminal that shows pictures, such as iTerm2 3.5 and later, kitty or Ghostty, gets the map as a picture above the rows, moving as it does in the desktop app. Claude Code must draw in fullscreen. If the pane stands under the conversation and not beside it, Claude Code is drawing on the main screen, and the rows stay alone: type `/tui fullscreen`, or start it as `CLAUDE_CODE_NO_FLICKER=1 claude`. Inside tmux, set `allow-passthrough on` and `focus-events on`. Any other terminal shows the rows alone, as before, and so does a pane narrower than 24 columns.
 
 The mod paints the picture itself, from the same drawing as the desktop app's, with letters from the X.Org misc-fixed bitmap fonts, which are in the public domain; [FONTS.md](FONTS.md) says where they come from. It paints up to thirty frames a second while anything on the map moves. The core breathes in the picture only while something runs, smoothly for ten minutes after the map last changed and then a frame every five seconds; at rest the picture stands still once the trails have faded.
 
-A terminal does not say whether it is dark or light, so with `theme` on `auto` the picture is dark; on a light terminal, set `theme` to `light`. The picture has no background of its own, so the terminal's shows through it; in iTerm2 that is a shade off the pane's grey, which leaves a faint box around the map. `colors` with `background=#rrggbb` gives the picture a background of its own.
+With `theme` on `auto` the picture is light or dark by the terminal's `COLORFGBG`, which iTerm2, rxvt and Konsole set; where nothing says, it is dark, and on a light terminal that does not say, set `theme` to `light`. The picture has no background of its own, so the terminal's shows through it; in iTerm2 that is a shade off the pane's grey, which leaves a faint box around the map. `colors` with `background=#rrggbb` gives the picture a background of its own.
 
 Nor does a terminal say how tall its cells are. `cellShape` does: how many times taller a cell is than it is wide, 2.4 by default, as iTerm2 draws Monaco 12, and about 2 for Menlo in kitty. If the picture leaves an empty band below it, raise it; if the band is at its right, lower it.
+
+## In VS Code
+
+In the VS Code extension the pane is short, and the map drawn as wide as the pane does not fit it. There, and only there, three buttons stand at the end of the line of now. **Zoom out** and **Zoom in** draw the map at one of six widths, from 160 to 400 pixels, or as wide as the pane. **Hide map** folds the pane to that one line, and **Show map** brings the map back. What you chose is kept for the next session.
 
 ## Options
 
@@ -176,7 +180,7 @@ A label holds a name, never content:
 
 - a file: the last two parts of its path;
 - a web address: the host alone, without a login, password, path or query; an address that can be read two ways shows only its scheme;
-- a shell command: the short description Claude wrote for it, or the command's name, never the command line. The description is the model's own words, and the mod shows them as written;
+- a shell command or a monitor: the short description Claude wrote for it, or the command's name, never the command line. The description is the model's own words, and the mod shows them as written;
 - a search: the tool's name for `Grep` and `Glob`, the words `web search` for a web search and `loading tools` for a tool search, in the map's language, never the pattern or the query;
 - a memory call: the tool's name and a record number or short identifier, never the text or the query;
 - a memory command: its name, and the word after it only if you listed that word in `memorySubcommands`;
@@ -199,7 +203,7 @@ Words live in `hooks/text.ts`; a new language is one more table there and one mo
 
 The terminal picture is painted by `hooks/raster.ts`, which reads the drawing `drawMap` makes. A test paints every kind of drawing and fails on anything the painter does not know, so a change to the drawing that needs more of SVG shows there first. Another, `the terminal picture's font has every letter the map writes, in every language`, names the letters a new language needs added to `hooks/font.ts`; [FONTS.md](FONTS.md) says how to make that file again.
 
-Before you send a change, read [CONTRIBUTING.md](CONTRIBUTING.md).
+Before you send a change, read [CONTRIBUTING.md](CONTRIBUTING.md). What the mod holds to, and the check behind each point, is in [PRINCIPLES.md](PRINCIPLES.md).
 
 ## License
 
