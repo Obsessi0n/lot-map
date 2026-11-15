@@ -1260,3 +1260,46 @@ test('with subagentNames the steps of two subagents keep a row each, and without
     ['a1', 1],
   ])
 })
+
+test('a call still running stays in the list however many rows came after it, as the last row, and leaves when it ends', () => {
+  // Stations alternate so that nothing folds: every entry is a row of its own.
+  const after = Array.from({ length: 20 }, (_, i) => entry(i % 2 === 0 ? 'files' : 'shell', 100 + i))
+  const running = entry('shell', 1, { status: 'run', endedAt: undefined, task: 'b1', label: 'Run the long build' })
+  const rows = foldRows([entry('files', 0), running, ...after])
+  expect(rows.length).toBe(16)
+  expect(rows[15]?.entry.label).toBe('Run the long build')
+  // The fifteen above it are the newest, in order.
+  expect(rows.slice(0, 15).map(r => r.entry.startedAt)).toEqual(Array.from({ length: 15 }, (_, i) => 119 - i))
+
+  // Two of them: both stay, the newer above the older.
+  const second = entry('agents', 2, { status: 'run', endedAt: undefined, label: 'Read the docs' })
+  expect(foldRows([running, second, ...after]).slice(14).map(r => r.entry.label)).toEqual(['Read the docs', 'Run the long build'])
+
+  // Ended, it is a row like any other and goes with the rest.
+  const ended = { ...running, status: 'ok' as const, endedAt: 50 }
+  expect(foldRows([ended, ...after]).some(r => r.entry.label === 'Run the long build')).toBe(false)
+})
+
+test('the last row of a full list folds only what stood next to it, not the same station further back', () => {
+  // Model and shell in turn, forty of them: the sixteenth row is one call, with nothing of the older ones in it.
+  const turns = Array.from({ length: 40 }, (_, i) => entry(i % 2 === 0 ? 'model' : 'shell', i))
+  const rows = foldRows(turns)
+  expect(rows.length).toBe(16)
+  expect(rows.map(r => r.times)).toEqual(Array.from({ length: 16 }, () => 1))
+  // What does stand next to it still folds in.
+  const tail = [entry('model', 0), entry('model', 1), ...Array.from({ length: 15 }, (_, i) => entry(i % 2 === 0 ? 'shell' : 'files', 10 + i))]
+  expect(foldRows([entry('shell', -1), ...tail])[15]?.times).toBe(2)
+})
+
+test('thirty background tasks still running take half the list, the last of them standing for the rest, and the newest calls keep the other half', () => {
+  const tasks = Array.from({ length: 30 }, (_, i) => entry('agents', i, { status: 'run', endedAt: undefined, task: `b${i}`, label: `task ${i}` }))
+  const after = Array.from({ length: 20 }, (_, i) => entry(i % 2 === 0 ? 'files' : 'shell', 100 + i))
+  const rows = foldRows([...tasks, ...after])
+  expect(rows.length).toBe(16)
+  // The newest eight calls, then the newest eight of the tasks; the eighth stands for the twenty-two older ones.
+  expect(rows.slice(0, 8).map(r => r.entry.startedAt)).toEqual([119, 118, 117, 116, 115, 114, 113, 112])
+  expect(rows.slice(8).map(r => r.entry.label)).toEqual(['task 29', 'task 28', 'task 27', 'task 26', 'task 25', 'task 24', 'task 23', 'task 22'])
+  expect(rows.slice(8).map(r => r.times)).toEqual([1, 1, 1, 1, 1, 1, 1, 23])
+  // Every one of the thirty is counted once.
+  expect(rows.slice(8).reduce((n, r) => n + r.times, 0)).toBe(30)
+})
