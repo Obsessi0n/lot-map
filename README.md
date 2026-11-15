@@ -2,6 +2,8 @@
 
 A mod for Claude Code: a live map of the work, in a pane beside the chat. Every tool call, model step, hook and skill sends a pulse from the centre to its station, so you see memory, files, shell, web and agents at work instead of reading a list of commands.
 
+It runs on your machine and sends nothing anywhere. Local does not mean blind: like any mod that follows tool calls it is handed each call whole, and it takes names from that and nothing else. [What it reads and keeps](PRIVACY.md), and [the checks that hold it to that](PRINCIPLES.md).
+
 ![The map during a work session](docs/demo.gif)
 
 *A made-up session replayed through the mod's own drawing code. [Video (MP4)](docs/demo.mp4).*
@@ -29,7 +31,7 @@ claude plugin install lot-map@lot-map
 
 In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `alexeyw/lot-map`, then **Add plugin**.
 
-The pane opens by itself when a session starts. In a terminal it needs at least 144 columns, otherwise type `/lot-map`, and it draws text only unless you ask for the map's picture: see [In a terminal](#in-a-terminal). Built and tested on Claude Code 2.1.321 on macOS; users report it working on Windows as well.
+The pane opens by itself when a session starts. In a terminal it needs at least 144 columns, otherwise type `/lot-map`, and it draws text only unless you ask for the map, as a picture or in braille dots: see [In a terminal](#in-a-terminal). Built and tested on Claude Code 2.1.321 on macOS; users report it working on Windows as well.
 
 ## Updating
 
@@ -48,20 +50,20 @@ What each version changed is in [CHANGELOG.md](CHANGELOG.md).
 
 | Station | When |
 | --- | --- |
-| You | your messages, questions and files sent to you, the task list and the plan |
+| You | your messages, questions and files sent to you, the task list, the plan, and what you are asked to approve |
 | Model | each model request, context compaction |
 | Memory | Claude Code's memory folder, plus whatever you name in the options |
-| Files | Read, Write, Edit, Grep, Glob, and shell commands that work on files and nothing else: they read, search, move, delete or edit in place (`cat`, `grep`, `mv`, `rm`, `sed`, `tee`, `find … -delete`) |
+| Files | Read, Write, Edit, Grep, Glob, a language server's code intelligence, and shell commands that work on files and nothing else: they read, search, move, delete or edit in place (`cat`, `grep`, `mv`, `rm`, `sed`, `tee`, `find … -delete`) |
 | Shell | every other shell command |
-| Network | web fetch and search, MCP servers, and shell commands known to reach the network: `curl`, `gh`, `ssh`, `rsync`, `git push`, `npm install`, `docker pull` and the like, also inside `$(…)` |
+| Network | web fetch and search, MCP servers, work kept on claude.ai (artifacts, projects, designs), and shell commands known to reach the network: `curl`, `gh`, `ssh`, `rsync`, `git push`, `npm install`, `docker pull` and the like, also inside `$(…)` |
 | Browser | browser tools |
-| Agents | subagents, workflows and schedules; their own calls start from this station |
-| Skills | skills, tool search, and the skill and plugin catalogue |
+| Agents | subagents, workflows, schedules, and waiting on background work; their own calls start from this station |
+| Skills | skills, tool search, and the skill, plugin and connector catalogue |
 | Hooks | settings hooks that refuse a call, ask for permission, add context or take a moment |
 
 On Windows the PowerShell tool is read the same way as Bash, with PowerShell's own names: `Get-Content` and `Select-String` light Files, `Invoke-WebRequest` lights Network. A program run by its full path is read by its name, also from a quoted path with a space, and `CURL.EXE` is `curl`.
 
-The shell stations go by the command's name, not by what it does: a script that opens a connection itself, such as `python -c "…"`, shows as Shell. A command behind `sudo`, `env`, `timeout`, `nohup`, `xargs` and the like is read as the command it runs, and `find … -exec` as the command it is told to run. `npx` counts as Network only with `-y`, since without it it mostly runs what is installed already.
+The shell stations go by the command's name, not by what it does: a script that opens a connection itself, such as `python -c "…"`, shows as Shell. A command behind `sudo`, `env`, `timeout`, `nohup`, `xargs` and the like is read as the command it runs, and `find … -exec` as the command it is told to run. So is a command inside a loop or a condition (`for … do`, `if … then`, `while`, `!`, `{ … }`), and a line handed to a shell or to `eval` (`bash -c "…"`). The text of a here-document is not read, so a file written through one shows as Files whatever the text says. A line is read up to its first 8,000 characters. `npx` counts as Network only with `-y`, since without it it mostly runs what is installed already.
 
 A pulse flies out when something starts and returns when it ends. Refusals and errors turn red.
 
@@ -79,7 +81,7 @@ A pulse flies out when something starts and returns when it ends. Refusals and e
 - **Subagents.** Each one still at work circles the Agents station as a small dot, and its calls start from there.
 - **The answer.** One wide ring leaves the centre when the answer is ready.
 
-Below the map are a line that says what runs now, and the last 16 rows: `●` running, `·` done, `✕` failed or blocked, `◆` a change of model. Finished calls that follow one another at one station fold into one row, marked `+2` for the two it stands for besides the one named.
+Below the map are a line that says what runs now, and the last 16 rows: `●` running, `·` done, `✕` failed or blocked, `◆` a change of model. Finished calls that follow one another at one station fold into one row, marked `+2` for the two it stands for besides the one named. A call still running is never pushed out of the list by what came after it: it stays as the last row until it ends, so the list and the map say the same. Such rows take half the list at most; with more still running than that, the last one is marked `+22` for the rest.
 
 Each row is one line. Its words are cut at the pane's edge; its time stands in a column at the right, with a dash for what took none, such as a message arriving, and on the answer's row the length of the whole turn. A row with a long label has a `▸` before its time: press it to read the row whole, and again to close it. One row is open at a time. In a terminal the line of now also holds the context percentage and the model at its right, since no drawing is there to show them.
 
@@ -101,6 +103,38 @@ With `theme` on `auto` the picture is light or dark by the terminal's `COLORFGBG
 
 Nor does a terminal say how tall its cells are. `cellShape` does: how many times taller a cell is than it is wide, 2.4 by default, as iTerm2 draws Monaco 12, and about 2 for Menlo in kitty. If the picture leaves an empty band below it, raise it; if the band is at its right, lower it.
 
+### The map in braille dots
+
+With `terminalView` set to `braille`, the map stands above the rows as cells of text: braille dots for the spokes, the stations and the centre, letters for the names. It needs no pictures, only a font that has braille, so it shows in Windows Terminal and in most Linux terminals, where `picture` shows nothing. It is never a fallback: a terminal that cannot show the picture keeps the rows alone until you choose `braille` yourself.
+
+![The braille map in Windows Terminal](docs/map-braille.png)
+
+It is the same board, read the same way, with what a cell can carry:
+
+- **Stations.** An empty ring was not used yet, a ring with a dot was, and a full one is at work now and beats. A station that just finished stays bright for a few seconds. Red is an error or a refusal, and `!1` after the name counts them until your next message; `x3` is how many calls run there at once.
+- **Spokes.** A spoke takes its station's colour with the first call and a second line with much use. It lights when a call starts; a pulse flies out along it, and back when the call ends. What a hook brought unasked flies in from its station.
+- **The centre.** Its outline is the context window, filling clockwise from the top, amber at 70% and red at 90%, with the percentage over the name and the model under it. The model's name is bright for a few seconds after a change. One ring leaves the centre when the answer is ready.
+- **Subagents.** Each one still at work circles the Agents station as a dot.
+
+What it does not draw, since a cell holds one colour and a dot is all the detail there is:
+
+- the route between the stations, and its fading trail;
+- the clock hands around a station at work;
+- the icons in the stations, the dashed contours and the breathing of the centre;
+- the rings where a pulse lands and where the model changes;
+- pulses side by side: calls that start together fly as one, and `x3` says how many;
+- memory's second count, `↓`, of what a hook brought unasked: one number counts both;
+- the fading of a glow: a station is bright, and then it is not.
+
+Its colours are the map's own, as in the desktop app. `theme` and `colors` hold; under `auto` it is light or dark by `COLORFGBG`, as the picture is, and dark where nothing says, so on a light terminal that does not say, set `theme` to `light`. `background` means here what it means there:
+
+- `solid`, the default: the cells stand on the palette's background and the words take its text colour, so the map reads in any pane. The pane's own ground comes from Claude Code's theme, which the map cannot ask for; where that and the terminal differ, such as a light terminal under the dark theme, it is a light map in a dark pane, as the picture is.
+- `transparent`: the cells have no ground and the words take the terminal's own colour. Choose it where the terminal and Claude Code's theme agree: the map then sits in the pane with no box around it. Where they differ the words can hardly be read.
+
+`layout` turns the ring. With `motion` on `reduced` nothing flies, beats or circles: a call lights its station and its spoke, and the subagents stand beside theirs.
+
+Like the picture, the map shows only where the pane stands beside the conversation. Under Claude Code's default renderer the pane stands under the conversation and is too short for the map, so the rows stay alone: type `/tui fullscreen`, or start it as `CLAUDE_CODE_NO_FLICKER=1 claude`. The map needs a pane body of at least 50 columns and 25 rows, and takes up to 76 by 21; in a smaller pane the rows stay alone. It is painted again only when it will look different: about eight times a second while a pulse flies or a subagent circles, at each beat of a station at work, and not at all at rest. Ten minutes after the map last changed, what still runs gets a frame every five seconds.
+
 ## In VS Code
 
 In the VS Code extension the pane is short, and the map drawn as wide as the pane does not fit it. There, and only there, three buttons stand at the end of the line of now. **Zoom out** and **Zoom in** draw the map at one of six widths, from 160 to 400 pixels, or as wide as the pane. **Hide map** folds the pane to that one line, and **Show map** brings the map back. What you chose is kept for the next session.
@@ -120,13 +154,14 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | `memoryLabels` | none | short names for memory tools, each as `tool=name` |
 | `hookRecords` | `false` | turn on if a hook of yours adds memory records numbered like `[#123]`; they appear on Memory by number only. Such a number in the text of any hook counts, not only a memory hook's |
 | `hookReasons` | `false` | show the first line of a hook's refusal, up to 72 characters; off, the map says only which tool was stopped |
+| `subagentNames` | `false` | a subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters; off, it says only that it is a subagent |
 | `theme` | `auto` | the map's colours: `dark`, `light`, or `auto`, which is dark on a dark surface and light on a light one |
 | `background` | `solid` | the map's own background, or `transparent`, which lets the pane behind it show through. The rim around the labels keeps the background's colour, so on a surface of another shade it shows as a faint halo |
 | `colors` | none | colours of your own, each as `name=#rrggbb`; see [Colours of your own](#colours-of-your-own) |
 | `layout` | `you-top` | where you are on the map: `you-top`, or `you-bottom`, which turns the ring half a turn so that you are at the bottom and the network and the browser at the top |
 | `motion` | `full` | `full`, or `reduced`: nothing flies, spreads or spins. A call still lights its station and flashes its spoke, the route still gets its leg, and those only fade; the clock hands around a running station stay, as slow as a clock's |
 | `textSize` | `footnote` | the size of the rows under the map: `caption`, `footnote` or `body`. A terminal has one size and ignores it |
-| `terminalView` | `text` | how the map looks in a terminal: `text`, the rows alone, or `picture`, the map's picture above them in a terminal that shows pictures; see [In a terminal](#in-a-terminal) |
+| `terminalView` | `text` | how the map looks in a terminal: `text`, the rows alone; `picture`, the map's picture above them in a terminal that shows pictures; or `braille`, the map above them in braille dots, in any terminal whose font has braille. See [In a terminal](#in-a-terminal) |
 | `cellShape` | `2.4` | for the terminal picture: how many times taller a terminal cell is than it is wide, from 1.2 to 4, so that the picture fills its box; see [In a terminal](#in-a-terminal) |
 
 For example, Russian labels and your own memory server:
@@ -174,7 +209,7 @@ Like any mod that follows tool calls, it is handed every call's whole input, inc
 
 It asks Claude Code for one thing: how full the context window is, after each model step. Between sessions it keeps one thing, the name of the model last used in each folder, so that it can show a change. Each is stored under the folder's full path, in Claude Code's own store for the plugin.
 
-What its hooks do. The mod listens to the session's start, prompts, turns, model steps, tool calls, skills, compaction, and to three events of settings hooks: `PreToolUse`, where it sees whether a hook refused the call, asked for permission or took a moment, and `UserPromptSubmit` and `SessionStart`, where it sees the context a hook added. Each of its hooks passes the event on as it came and returns what came back as it was: it changes no input, no result, no context and no permission decision, and makes none of its own. Its one command, `/lot-map`, opens the pane.
+What its hooks do. The mod listens to the session's start, prompts, turns, model steps, tool calls, skills, compaction, with `subagentNames` on a subagent's start, and to three events of settings hooks: `PreToolUse`, where it sees whether a hook refused the call, asked for permission or took a moment, and `UserPromptSubmit` and `SessionStart`, where it sees the context a hook added. Each of its hooks passes the event on as it came and returns what came back as it was: it changes no input, no result, no context and no permission decision, and makes none of its own. Its one command, `/lot-map`, opens the pane.
 
 A label holds a name, never content:
 
@@ -184,7 +219,7 @@ A label holds a name, never content:
 - a search: the tool's name for `Grep` and `Glob`, the words `web search` for a web search and `loading tools` for a tool search, in the map's language, never the pattern or the query;
 - a memory call: the tool's name and a record number or short identifier, never the text or the query;
 - a memory command: its name, and the word after it only if you listed that word in `memorySubcommands`;
-- a subagent: the short description it was started with;
+- a subagent: the short description it was started with; with `subagentNames` on, its first 40 characters on that subagent's model steps as well;
 - a background task's report: that the task ended and whether it failed, never its summary or its output;
 - a hook's refusal: the name of the tool it stopped. Its first line shows only with `hookReasons` on, because a refusal may quote what the hook found.
 
@@ -202,6 +237,8 @@ claude plugin validate .
 Words live in `hooks/text.ts`; a new language is one more table there and one more value of `language` in `.claude-plugin/plugin.json`.
 
 The terminal picture is painted by `hooks/raster.ts`, which reads the drawing `drawMap` makes. A test paints every kind of drawing and fails on anything the painter does not know, so a change to the drawing that needs more of SVG shows there first. Another, `the terminal picture's font has every letter the map writes, in every language`, names the letters a new language needs added to `hooks/font.ts`; [FONTS.md](FONTS.md) says how to make that file again.
+
+The braille map is drawn by `hooks/braille.ts`: a second drawing of the same board, which takes its stations from `STATIONS` and its timings from `hooks/draw.ts`. Tests in `hooks/braille.test.tsx` hold it to every station under both layouts, and one in `hooks/lot-map.test.tsx` to the names of every language. Something new on the map is either drawn there too or added to the list of what braille leaves out, in [In a terminal](#the-map-in-braille-dots).
 
 Before you send a change, read [CONTRIBUTING.md](CONTRIBUTING.md). What the mod holds to, and the check behind each point, is in [PRINCIPLES.md](PRINCIPLES.md).
 

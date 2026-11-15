@@ -23,6 +23,7 @@ Every hook hands the event on as it came and returns what came back as it was. N
 - `principle 1: every hook hands on the event it was given and returns what came back`: eight events, each sent through the mod with a hook beneath it that records what arrived and answers with a marked value.
 - `principle 1: a refusal comes back as it was written…`: a refusal from a plugin beneath and one from a settings hook.
 - `a model step streams through untouched…` in `hooks/lot-map.test.tsx`, for the one event that streams.
+- `with subagentNames a subagent's step says which subagent it is…` and `with subagentNames a refused spawn comes back as it was written…` in the same file, for a subagent's start, which the mod hooks only with that option on.
 - `scripts/check-surface.mjs` fails if the mod hooks an event that can change what the model is sent or what is allowed (`prompt.compose`, `session.append`, `tool.describe`, `tool.check`).
 
 ## 2. A label holds a name, never content
@@ -33,9 +34,9 @@ The mod makes no network request, reads no file, runs no process and calls no mo
 
 **Checked by:**
 
-- `principle 2: no tool puts content on its label, whatever its input carries`: 57 tool names, each called with a mark in every field that holds content (command line, pattern, query, file text, prompt, plan, the first parts of a path, an address's login, path and query).
+- `principle 2: no tool puts content on its label, whatever its input carries`: 87 tool names, each called with a mark in every field that holds content (command line, pattern, query, file text, prompt, plan, the first parts of a path, an address's login, path and query, a resource's address).
 - `principle 2: nothing a session carries reaches what the mod keeps or draws`: the same calls, a message, a hook's refusal and a hook's context sent through the mod; the mark is in nothing written to the session's state or the store, and in no text on the pane.
-- `scripts/check-surface.mjs` holds the mod to [`scripts/surface.txt`](scripts/surface.txt): 13 hooks, 13 engine calls, one environment variable read (`COLORFGBG`), one state key. A new call or read fails the check until that file is changed, so it shows in the pull request. Whatever the file says, a call to `$.fs`, `$.process`, `$.model`, `$.agent`, `$.tool` or `$.audio`, or a `fetch` in the code, fails it.
+- `scripts/check-surface.mjs` holds the mod to [`scripts/surface.txt`](scripts/surface.txt): 14 hooks, 13 engine calls, one environment variable read (`COLORFGBG`), one state key. A new call or read fails the check until that file is changed, so it shows in the pull request. Whatever the file says, a call to `$.fs`, `$.process`, `$.model`, `$.agent`, `$.tool` or `$.audio`, or a `fetch` in the code, fails it.
 
 ## 3. It costs next to nothing
 
@@ -48,17 +49,21 @@ No tokens: the mod calls no model and adds nothing to the conversation or the pr
 | Folding 80 rows for the list under the map | 2 µs | 0.2 ms |
 | A tool call through the mod and the test kit, start to end | 1.5 ms | 15 ms |
 | The same after 300 more calls | 1.2 to 1.4 ms | three times the first |
-| Naming a call whose command line is a 19,000-character script | 15 ms | 150 ms |
+| Naming a call whose command line is a 19,000-character script | 0.4 ms | 20 ms |
+| Reading a drawing for the terminal picture, once each time the board changes | 0.6 to 1.2 ms | 20 ms |
+| A frame of the terminal picture, painted and packed into a PNG, with the map at rest | 11 to 12 ms | 100 ms |
+| The same with 80 rows, five calls running, three subagents | 19 to 20 ms | 100 ms |
 
 Measured on 2026-11-13, Apple M1 Pro, Claude Code 2.1.321, after a warm-up, three runs. The budgets are many times the figures so that a slow CI runner passes; they catch a change of kind, not of degree.
 
 **What the figures do not say:**
 
 - The 1.5 ms is the mod together with the test kit that stands in for the engine. In a live session the engine's own share is not measured.
-- Reading a command line takes about a microsecond a character, growing in a straight line: 2 to 3 ms for 2,000 characters of piped commands, 15 to 30 ms for 20,000, 140 to 290 ms for 200,000. Commands of that size are rare (a file written through a heredoc), and the time is spent before the call runs. It is the one cost here that is not next to nothing.
-- The terminal picture (`terminalView: picture`, off by default) paints up to thirty frames a second while the map moves. Its cost per frame has no test here.
+- A command line is read up to its first 8,000 characters, and the text of a here-document is not read at all: a longer line is a script written inline, and what counts stands at its start. Ordinary piped commands take about a microsecond a character: 2 ms for 2,000 characters, 8 ms for 8,000 and for anything longer. The worst input found, 200,000 characters of one-letter commands joined by pipes, takes 36 ms, and a here-document of 200,000 characters 4.5 ms (measured on 2026-11-14, the same machine). The time is spent before the call runs.
+- The terminal picture (`terminalView: picture`, off by default) is the one cost here that is not next to nothing. It paints up to thirty frames a second while the map moves and none while it stands still. A frame of 690 by 645 pixels takes 19 to 20 ms with the map at work, 7 of them painting and the rest packing the PNG: while something moves that is up to six tenths of one processor core, in the process the hooks run in. Measured on 2026-11-14, the same machine. What the terminal then spends showing the picture is not measured.
+- The braille map (`terminalView: braille`, off by default) paints up to eight frames a second while the map moves, and none at rest. A frame of the largest map, painted and packed, took 0.14 to 0.24 ms on an Intel Core Ultra 7 155H under Windows 11 (Claude Code 2.1.325, after a warm-up, three runs). `principle 3: a frame of the braille map…` in `hooks/braille.test.tsx` holds it under 5 ms and prints its figure with the others.
 
-**Checked by:** `principle 3: naming a call, drawing the map and folding the rows each stay within their budget` and `principle 3: a tool call through the mod stays within its budget…`. Both print their figures: `claude plugin test . | grep COST`.
+**Checked by:** `principle 3: naming a call, drawing the map and folding the rows each stay within their budget`, `principle 3: a tool call through the mod stays within its budget…`, `principle 3: a frame of the terminal picture stays within its budget…` and the braille map's test of the same kind. All print their figures: `claude plugin test . | grep COST`.
 
 ## 4. A fault on the map never reaches the work
 

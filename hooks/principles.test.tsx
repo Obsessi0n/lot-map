@@ -3,6 +3,8 @@ import { expect, test } from 'claude-code/testing'
 
 import type { Board } from '../types'
 import { STATIONS, classify, clean, drawMap, foldRows, setupFrom } from './map'
+import { imageSource, paint, parseMap, scaleFor } from './raster'
+import { SCALE } from './terminal'
 
 const PANE = {
   plugin: 'lot-map',
@@ -17,7 +19,7 @@ const PLAIN = setupFrom({})
 const TALK = [{ role: 'user', text: 'kept', toolUses: [] }]
 
 // prettier-ignore
-const DEFAULTS = {"language":"en","coreName":"CLAUDE","memoryServers":["memory"],"memoryCommands":[],"memorySubcommands":[],"memoryPaths":[],"memoryLabels":[],"hookRecords":false,"hookReasons":false,"theme":"auto","background":"solid","colors":[],"layout":"you-top","motion":"full","textSize":"footnote","terminalView":"text","cellShape":2.4}
+const DEFAULTS = {"language":"en","coreName":"CLAUDE","memoryServers":["memory"],"memoryCommands":[],"memorySubcommands":[],"memoryPaths":[],"memoryLabels":[],"hookRecords":false,"hookReasons":false,"subagentNames":false,"theme":"auto","background":"solid","colors":[],"layout":"you-top","motion":"full","textSize":"footnote","terminalView":"text","cellShape":2.4}
 
 // ---- 1. It watches and changes nothing ------------------------------------------------------------
 
@@ -105,6 +107,8 @@ const loaded = (more: Record<string, unknown> = {}): Record<string, unknown> => 
   files: [`/Users/${MARK}/a.txt`],
   script: MARK,
   args: MARK,
+  uri: `file:///Users/${MARK}/notes.md`,
+  server: MARK,
   ...more,
 })
 
@@ -117,7 +121,11 @@ const TOOLS = [
   'SendToProject', 'SendToProjectContext', 'Agent', 'Monitor', 'Workflow', 'SendMessage', 'TaskStop', 'ListAgents', 'CronCreate', 'CronDelete', 'CronList',
   'ScheduleWakeup', 'RemoteTrigger', 'Skill', 'ToolSearch', 'ListSkills', 'SearchSkills', 'SuggestSkills', 'ListPlugins', 'SearchPlugins', 'SuggestPluginInstall',
   'AskUserQuestion', 'SendUserFile', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'EnterPlanMode', 'ExitPlanMode', 'PushNotification',
-  'ReportFindings', 'EnterWorktree', 'ExitWorktree', 'SomeToolOfTomorrow', 'mcp__memory__search', 'mcp__Claude_Browser__navigate', 'mcp__claude-in-chrome__navigate',
+  'ReportFindings', 'EnterWorktree', 'ExitWorktree', 'SendUserMessage', 'FetchInboxMessage', 'SendFeedback', 'ProposeGoal', 'propose_skills',
+  'WrapUp', 'ShowOnboardingRolePicker', 'OfferChromeSetup', 'ReadWidgetContext', 'EndConversation', 'SubagentHandback', 'SendFile', 'Poll', 'Yield',
+  'ReadNotifications', 'ListConnectors', 'SearchMcpRegistry', 'SuggestConnectors', 'WaitForMcpServers', 'Projects', 'ClaudeDesign', 'DesignSync',
+  'ShareOnboardingGuide', 'PublishPlugin', 'ListMcpResourcesTool', 'ReadMcpResourceTool', 'ReadMcpResourceDirTool', 'LSP', 'REPL', 'AppifactRepl',
+  'SomeToolOfTomorrow', 'mcp__memory__search', 'mcp__Claude_Browser__navigate', 'mcp__claude-in-chrome__navigate',
   'mcp__remote-devices__Claude_Browser__navigate', 'mcp__terminal__run_in_terminal', 'mcp__visualize__show_widget', 'mcp__ccd_turn__update_plan',
   'mcp__plugin-authoring__scan_secrets', 'mcp__some_server__some_tool',
 ]
@@ -171,6 +179,10 @@ const timed = (times: number, work: (i: number) => void): number => {
   return (now() - started) / times
 }
 
+// Many times the measured figures, as the other budgets are: 1 ms to read a drawing, 20 ms for a frame at work.
+const READING_BUDGET_MS = 20
+const FRAME_BUDGET_MS = 100
+
 const ORDINARY: [string, Record<string, unknown>][] = [
   ['Bash', { command: 'cd /a/b && sudo env X=1 git -C dir push origin main | tee out.log; find . -name "*.ts" -exec grep -l foo {} +', description: 'Push' }],
   ['Bash', { command: 'git status', description: 'Status' }],
@@ -207,7 +219,7 @@ test('principle 3: naming a call, drawing the map and folding the rows each stay
   expect(naming).toBeLessThan(0.5)
   expect(drawing).toBeLessThan(2)
   expect(folding).toBeLessThan(0.2)
-  expect(long).toBeLessThan(150)
+  expect(long).toBeLessThan(20)
 })
 
 test('principle 3: a tool call through the mod stays within its budget, and the two hundredth costs what the first did', async ($, on) => {
@@ -232,6 +244,26 @@ test('principle 3: a tool call through the mod stays within its budget, and the 
 })
 
 // ---- 4. A fault on the map never reaches the work ---------------------------------------------------
+
+test('principle 3: a frame of the terminal picture stays within its budget, at rest and with the map at work', () => {
+  // What `terminalView: picture` does: the drawing is read once when the board changes, and then each frame is
+  // painted and packed into a PNG, up to thirty times a second while something moves.
+  const at = 1_033_000
+  const figures: string[] = []
+  for (const [name, board] of [['at rest', { entries: [], counts: {} } as Board], ['at work', busy()]] as const) {
+    const svg = drawMap(board, at, PLAIN)
+    const reading = timed(15, () => { parseMap(svg) })
+    const scene = parseMap(svg)
+    const scale = scaleFor(scene, SCALE)
+    const painting = timed(15, i => { paint(scene, i * 33, scale) })
+    const frame = timed(15, i => { imageSource(paint(scene, i * 33, scale)) })
+    const size = paint(scene, 0, scale)
+    figures.push(`${name}: reading the drawing ${reading.toFixed(2)}ms | painting ${painting.toFixed(2)}ms | painted and packed ${frame.toFixed(2)}ms (${size.width}x${size.height})`)
+    expect(reading).toBeLessThan(READING_BUDGET_MS)
+    expect(frame).toBeLessThan(FRAME_BUDGET_MS)
+  }
+  console.log(`COST a picture frame, ${figures.join(' ; ')}`)
+})
 
 test('principle 4: with the engine refusing every call the mod makes, each event still goes through', async ($, on) => {
   for (const call of ['state.get', 'state.set', 'store.get', 'store.set', 'clock.now', 'session.usage'] as const) on(call as never, (() => { throw new Error('broken') }) as never)

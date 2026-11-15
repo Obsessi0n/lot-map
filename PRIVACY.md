@@ -2,7 +2,7 @@
 
 lot-map is a mod for Claude Code that draws a map of the work in a pane beside the chat. It runs inside Claude Code on your computer. There is no lot-map service, no account and no server: nothing the mod sees leaves your machine through it.
 
-This page describes version 0.7.0. It changes only together with the code, and the [changelog](CHANGELOG.md) says when it did.
+This page describes version 0.8.0. It changes only together with the code, and the [changelog](CHANGELOG.md) says when it did.
 
 ## What the mod is handed
 
@@ -15,13 +15,13 @@ The mod does not look for personal data and has no use for it. It takes a name f
 - a shell command or a monitor: the short description Claude wrote for it, or the command's name, never the command line;
 - a search: the tool's name for `Grep` and `Glob`, the words `web search` for a web search and `loading tools` for a tool search, in the map's language, never the pattern or the query;
 - a memory call: the tool's name and a record number or short identifier, never the text or the query;
-- a subagent: the short description it was started with;
+- a subagent: the short description it was started with; with `subagentNames` on, its first 40 characters on that subagent's model steps as well;
 - those descriptions are written by the model, and the mod shows them as written, up to 120 characters: it does not check what they say;
 - a background task's report: that it ended and whether it failed;
 - a hook's refusal: the name of the tool it stopped, and its first line only if you turn `hookReasons` on;
 - context a hook added: that it was added, and record numbers only if you turn `hookRecords` on.
 
-The mod asks for one thing by itself: the environment variable `COLORFGBG`, and only with `terminalView` set to `picture` and `theme` on `auto`. It holds the terminal's colour numbers, by which the picture is painted light or dark. The mod keeps that answer, light or dark, for the session and nothing else from it, and reads no other variable.
+The mod asks for one thing by itself: the environment variable `COLORFGBG`, and only with `terminalView` set to `picture` or `braille` and `theme` on `auto`. It holds the terminal's colour numbers, by which the map above the rows is painted light or dark. The mod keeps that answer, light or dark, for the session and nothing else from it, and reads no other variable.
 
 ## What it keeps
 
@@ -38,6 +38,7 @@ To remove what it keeps, uninstall the plugin.
 - It reads no files and runs no processes.
 - It calls no model and adds nothing to the conversation.
 - With `terminalView` set to `picture`, in a terminal that shows pictures it paints the map's picture itself, from the same rows, and hands it to Claude Code to draw in the pane. The picture holds nothing the map does not show.
+- With `terminalView` set to `braille`, it draws the map as cells of text, from the same rows. The cells hold the stations' names and counts, the name in the centre, the model's name and the context percentage, and no label of any row.
 - It changes no tool call, result, prompt or context. It sees what your settings hooks decide about a call, hands that decision on as it was, and decides nothing about permissions itself.
 
 The code that takes names from a call is `classify` in [`hooks/classify.ts`](hooks/classify.ts); the hooks are in [`hooks/register.tsx`](hooks/register.tsx).

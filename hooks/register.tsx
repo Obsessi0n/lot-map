@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Board, Entry, StationId, Status } from '../types'
 import { MAP_ASPECT, STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
-import { drawPicture, terminalPicture } from './terminal'
+import { drawTerminalMap, terminalMap } from './terminal'
 
 const PANE = 'lot-map'
 const KEEP = 80
@@ -13,6 +13,8 @@ const LONG_LABEL = 28
 /** The least the time takes at the end of a row, so that short times line up: `107 ms`. A longer one widens its own row. */
 const TIME_COLUMN = 6
 const CREW = 12
+/** How many subagents' names are kept for their rows. */
+const CREW_NAMES = 32
 /**
  * The widths, in CSS pixels, the editor may draw the map at. Its pane is a third of the panel tall and cannot be made
  * taller, so the person zooms the map out until it fits, rows and all. Past the last, the map is as wide as the pane.
@@ -180,8 +182,8 @@ export const register: Register = (on, options) => {
   let lastModel: string | undefined
   let modelKey = 'model'
 
-  // In a terminal, the map's picture above the rows, for a person who asked for it.
-  const picture = terminalPicture(setup)
+  // In a terminal, the map above the rows, as a picture or in braille dots, for a person who asked for it.
+  const above = terminalMap(setup)
 
   on('session.start', async ($, e, next) => {
     await quietly(() => $.command.register({ name: 'lot-map', description: t.command }))
@@ -218,6 +220,28 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // Which subagent is which, by the few words it was started with: the same words its row on Agents already shows.
+  // Kept for the labels of its model steps and nowhere else; the newest CREW_NAMES of them.
+  const crew = new Map<string, string>()
+  if (setup.subagentNames) {
+    on('agent.spawn', async ($, e, next) => {
+      const started = await next(e)
+      try {
+        const name = clean(e.description, 40)
+        if (started.agentId !== undefined && name !== '') {
+          crew.set(started.agentId, name)
+          for (const id of crew.keys()) {
+            if (crew.size <= CREW_NAMES) break
+            crew.delete(id)
+          }
+        }
+      } catch {
+        // A name that cannot be kept is no reason to trouble the spawn.
+      }
+      return started
+    })
+  }
+
   on('turn.step', async function* ($, e, next) {
     const isMain = e.agentId === undefined
     if (isMain && lastModel !== e.model) {
@@ -238,7 +262,7 @@ export const register: Register = (on, options) => {
     }
     const id = await begin($, {
       station: 'model',
-      label: `${shortModel(e.model)} · ${t.step(e.index + 1)}${isMain ? '' : ` · ${t.subagent}`}`,
+      label: `${shortModel(e.model)} · ${t.step(e.index + 1)}${isMain ? '' : ` · ${crew.get(e.agentId ?? '') ?? t.subagent}`}`,
       from: isMain ? 'core' : 'agents',
       ...(isMain ? { patch: { model: e.model, step: e.index + 1 } } : { agentId: e.agentId }),
     })
@@ -380,7 +404,7 @@ export const register: Register = (on, options) => {
       }
     }
 
-    const rows = foldRows(state.entries).map(({ entry, times, tookMs }) => {
+    const rows = foldRows(state.entries, undefined, setup.subagentNames).map(({ entry, times, tookMs }) => {
       const isSwitch = entry.mark === 'switch'
       const mark = isSwitch ? '◆' : entry.status === 'run' ? '●' : entry.status === 'ok' ? '·' : '✕'
       const whole = turnMs.get(entry.id)
@@ -449,7 +473,7 @@ export const register: Register = (on, options) => {
 
     if (e.surface === 'terminal') {
       const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}`).join(' · ')
-      const map = picture === undefined ? undefined : await quietly(() => drawPicture($, e, state, now, picture))
+      const map = await quietly(() => drawTerminalMap($, e, state, now, above))
       return (
         <Box flexDirection="column">
           {map !== undefined ? [map] : []}

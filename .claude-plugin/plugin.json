@@ -1,6 +1,6 @@
 {
   "name": "lot-map",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A live map beside the chat: memory, files, shell, web, model, agents, skills and hooks light up as they are used",
   "author": {
     "name": "Aleksei Volodin",
@@ -85,6 +85,12 @@
       "default": false,
       "description": "Show the first line of a hook's refusal, up to 72 characters. Off, the map says only which tool was stopped: a refusal may quote what the hook found."
     },
+    "subagentNames": {
+      "type": "boolean",
+      "title": "Name subagents in the rows",
+      "default": false,
+      "description": "A subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters. Off, it says only that it is a subagent."
+    },
     "theme": {
       "type": "string",
       "title": "Colours",
@@ -149,10 +155,11 @@
       "title": "Terminal view",
       "options": [
         "text",
-        "picture"
+        "picture",
+        "braille"
       ],
       "default": "text",
-      "description": "How the map looks in a terminal: text, the rows alone, or picture, the map itself above them, painted by the mod, in a terminal that shows pictures such as iTerm2, kitty or Ghostty."
+      "description": "How the map looks in a terminal: text, the rows alone; picture, the map itself above them, painted by the mod, in a terminal that shows pictures such as iTerm2, kitty or Ghostty; or braille, the map above them in braille dots and letters, in any terminal whose font has braille, such as Windows Terminal."
     },
     "cellShape": {
       "type": "number",

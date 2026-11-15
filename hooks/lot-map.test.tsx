@@ -2,7 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import type { Board } from '../types'
 import type { Entry } from '../types'
-import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
+import { paintBraille, rowsOf } from './braille'
+import { COLOR_NAMES, STATIONS, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import { hasGlyph } from './raster'
 import { stringsFor } from './text'
 
@@ -114,7 +115,7 @@ test('a command behind a wrapper is read as the command it runs', () => {
 
 test('built-in tools land by what they are for, labelled by their name alone', () => {
   // Every input carries words of its own: none of them may reach the label.
-  const content = { subject: 'private', description: 'private', prompt: 'private', plan: 'private', query: 'private' }
+  const content = { subject: 'private', description: 'private', prompt: 'private', plan: 'private', query: 'private', message: 'private', uri: 'private', server: 'private' }
   const seen = (tool: string) => {
     const { station, label } = classify(tool, content, STRANGER)
     return `${station} ${label}`
@@ -130,6 +131,16 @@ test('built-in tools land by what they are for, labelled by their name alone', (
     'ExitPlanMode',
     'PushNotification',
     'ReportFindings',
+    'SendUserMessage',
+    'FetchInboxMessage',
+    'SendFeedback',
+    'ProposeGoal',
+    'propose_skills',
+    'WrapUp',
+    'ShowOnboardingRolePicker',
+    'OfferChromeSetup',
+    'ReadWidgetContext',
+    'EndConversation',
   ]) expect(seen(tool)).toBe(`you ${tool}`)
 
   for (const tool of [
@@ -139,6 +150,11 @@ test('built-in tools land by what they are for, labelled by their name alone', (
     'ScheduleWakeup',
     'RemoteTrigger',
     'ListAgents',
+    'SubagentHandback',
+    'SendFile',
+    'Poll',
+    'Yield',
+    'ReadNotifications',
   ]) expect(seen(tool)).toBe(`agents ${tool}`)
 
   for (const tool of [
@@ -148,6 +164,10 @@ test('built-in tools land by what they are for, labelled by their name alone', (
     'ListPlugins',
     'SearchPlugins',
     'SuggestPluginInstall',
+    'ListConnectors',
+    'SearchMcpRegistry',
+    'SuggestConnectors',
+    'WaitForMcpServers',
   ]) expect(seen(tool)).toBe(`skills ${tool}`)
 
   for (const tool of [
@@ -155,13 +175,42 @@ test('built-in tools land by what they are for, labelled by their name alone', (
     'ArtifactData',
     'SendToProject',
     'SendToProjectContext',
+    'Projects',
+    'ClaudeDesign',
+    'DesignSync',
+    'ShareOnboardingGuide',
+    'PublishPlugin',
+    'ListMcpResourcesTool',
+    'ReadMcpResourceTool',
+    'ReadMcpResourceDirTool',
   ]) expect(seen(tool)).toBe(`web ${tool}`)
 
-  // They work with git: Shell, as before.
+  for (const tool of [
+    'LSP',
+  ]) expect(seen(tool)).toBe(`files ${tool}`)
+
+  // They work with git, or run code: Shell, as before.
   for (const tool of [
     'EnterWorktree',
     'ExitWorktree',
+    'REPL',
+    'AppifactRepl',
   ]) expect(seen(tool)).toBe(`shell ${tool}`)
+})
+
+test("an MCP server's resources are memory when the server is a memory server, and never show the resource's address", () => {
+  const seen = (tool: string, server: string, setup = STRANGER) => {
+    const { station, label } = classify(tool, { server, uri: 'file:///Users/a/private.md' }, setup)
+    return `${station} ${label}`
+  }
+  for (const tool of ['ListMcpResourcesTool', 'ReadMcpResourceTool', 'ReadMcpResourceDirTool']) {
+    expect(seen(tool, 'memory')).toBe(`memory ${tool}`)
+    expect(seen(tool, 'github')).toBe(`web ${tool}`)
+    // A server named in the person's options counts as theirs.
+    expect(seen(tool, 'recall', SETUP)).toBe(`memory ${tool}`)
+  }
+  // Listing every server's resources names none: the call is no memory call.
+  expect(classify('ListMcpResourcesTool', {}, STRANGER).station).toBe('web')
 })
 
 test('an MCP name with doubled underscores reads with single spaces', () => {
@@ -310,6 +359,23 @@ test('the terminal picture\'s font has every letter the map writes, in every lan
   const words = LANGUAGES.flatMap(language => Object.values(stringsFor(language).stations))
   const missing = [...new Set([...words.join(''), ...'0123456789%×↓→·…◆+ abcdefghijklmnopqrstuvwxyz.CLAUDE'])].filter(ch => !hasGlyph(ch))
   expect(missing).toEqual([])
+})
+
+test('the braille map has room for every station\'s name, whole and beside all it can carry, in every language', () => {
+  // The most a name carries: a count, and the mark of what went wrong.
+  const board: Board = { entries: [], counts: Object.fromEntries(STATIONS.map(s => [s.id, 888])), faults: Object.fromEntries(STATIONS.map(s => [s.id, 100])) }
+  for (const language of LANGUAGES) {
+    for (const layout of ['you-top', 'you-bottom'] as const) {
+      const setup = setupFrom({ language, layout })
+      // At its smallest and at its largest.
+      for (const [columns, rows] of [[50, 17], [76, 21]] as const) {
+        const grid = rowsOf(paintBraille(board, 1_000_000, setup, columns, rows)).join('\n')
+        for (const name of Object.values(setup.t.stations)) expect(grid).toContain(`${name} 888 !99+`)
+        // Every letter of the language is one a cell holds: none became a question mark.
+        expect(grid).not.toContain('?')
+      }
+    }
+  }
 })
 
 for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichiers   b/content.py'], ['de', 'Dateien    b/content.py'], ['it', 'File      b/content.py'], ['pt', 'Ficheiros b/content.py']] as const) {
@@ -1129,3 +1195,196 @@ test('minimized, the vscode pane is one line and a press restores the map', asyn
 })
 
 
+
+const SPAWN = { prompt: 'PRIVATE7Q read every file', description: 'Count md files', subagentType: 'Explore' }
+
+/** What stands beneath the mod for a subagent's step: a clock and a step that answers. Hooks go in before `$` is first called. */
+function beneathAStep(on: any): void {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('turn.step', async function* () {
+    yield { kind: 'text', index: 0, text: 'x' } as never
+    return { turnId: 't2', index: 0, answer: '', toolUses: [] } as never
+  })
+}
+
+/** One model step of subagent `a1`, left running, so its row is on the pane. */
+async function stepOfSubagent($: any): Promise<void> {
+  await $.turn.step({ ...stepOn('claude-haiku-5-5'), turnId: 't2', agentId: 'a1' } as never)[Symbol.asyncIterator]().next()
+}
+
+test('with subagentNames a subagent\'s step says which subagent it is, by its description and nothing else of the spawn', { options: { subagentNames: true } }, async ($, on) => {
+  beneathAStep(on)
+  let arrived: unknown
+  on('agent.spawn', ((_: unknown, e: unknown) => ((arrived = e), { model: 'claude-haiku-5-5', agentId: 'a1' })) as never)
+  const started = await $.agent.spawn(SPAWN as never)
+  // The mod watches the spawn: what goes beneath is what was sent, and what comes back is what was answered.
+  expect(arrived).toMatchObject(SPAWN)
+  expect(started).toEqual({ model: 'claude-haiku-5-5', agentId: 'a1' } as never)
+  await stepOfSubagent($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /haiku 5\.5 · step 1 · Count md files/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /PRIVATE7Q/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Explore/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without subagentNames a subagent\'s step says only that it is one', async ($, on) => {
+  beneathAStep(on)
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }) as never)
+  await $.agent.spawn(SPAWN as never)
+  await stepOfSubagent($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /haiku 5\.5 · step 1 · subagent/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Count md files/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('with subagentNames a refused spawn comes back as it was written, and a subagent nobody named is a subagent', { options: { subagentNames: true } }, async ($, on) => {
+  beneathAStep(on)
+  on('agent.spawn', () => ({ deny: 'not now' }) as never)
+  expect(await $.agent.spawn(SPAWN as never)).toEqual({ deny: 'not now' } as never)
+  await stepOfSubagent($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /haiku 5\.5 · step 1 · subagent/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('with subagentNames the steps of two subagents keep a row each, and without it they fold as before', () => {
+  const steps = [entry('model', 1, { from: 'agents', agentId: 'a1' }), entry('model', 2, { from: 'agents', agentId: 'a2' }), entry('model', 3, { from: 'agents', agentId: 'a2' })]
+  expect(foldRows(steps).map(r => r.times)).toEqual([3])
+  expect(foldRows(steps, 16, true).map(r => [r.entry.agentId, r.times])).toEqual([
+    ['a2', 2],
+    ['a1', 1],
+  ])
+})
+
+test('a call still running stays in the list however many rows came after it, as the last row, and leaves when it ends', () => {
+  // Stations alternate so that nothing folds: every entry is a row of its own.
+  const after = Array.from({ length: 20 }, (_, i) => entry(i % 2 === 0 ? 'files' : 'shell', 100 + i))
+  const running = entry('shell', 1, { status: 'run', endedAt: undefined, task: 'b1', label: 'Run the long build' })
+  const rows = foldRows([entry('files', 0), running, ...after])
+  expect(rows.length).toBe(16)
+  expect(rows[15]?.entry.label).toBe('Run the long build')
+  // The fifteen above it are the newest, in order.
+  expect(rows.slice(0, 15).map(r => r.entry.startedAt)).toEqual(Array.from({ length: 15 }, (_, i) => 119 - i))
+
+  // Two of them: both stay, the newer above the older.
+  const second = entry('agents', 2, { status: 'run', endedAt: undefined, label: 'Read the docs' })
+  expect(foldRows([running, second, ...after]).slice(14).map(r => r.entry.label)).toEqual(['Read the docs', 'Run the long build'])
+
+  // Ended, it is a row like any other and goes with the rest.
+  const ended = { ...running, status: 'ok' as const, endedAt: 50 }
+  expect(foldRows([ended, ...after]).some(r => r.entry.label === 'Run the long build')).toBe(false)
+})
+
+test('the last row of a full list folds only what stood next to it, not the same station further back', () => {
+  // Model and shell in turn, forty of them: the sixteenth row is one call, with nothing of the older ones in it.
+  const turns = Array.from({ length: 40 }, (_, i) => entry(i % 2 === 0 ? 'model' : 'shell', i))
+  const rows = foldRows(turns)
+  expect(rows.length).toBe(16)
+  expect(rows.map(r => r.times)).toEqual(Array.from({ length: 16 }, () => 1))
+  // What does stand next to it still folds in.
+  const tail = [entry('model', 0), entry('model', 1), ...Array.from({ length: 15 }, (_, i) => entry(i % 2 === 0 ? 'shell' : 'files', 10 + i))]
+  expect(foldRows([entry('shell', -1), ...tail])[15]?.times).toBe(2)
+})
+
+test('thirty background tasks still running take half the list, the last of them standing for the rest, and the newest calls keep the other half', () => {
+  const tasks = Array.from({ length: 30 }, (_, i) => entry('agents', i, { status: 'run', endedAt: undefined, task: `b${i}`, label: `task ${i}` }))
+  const after = Array.from({ length: 20 }, (_, i) => entry(i % 2 === 0 ? 'files' : 'shell', 100 + i))
+  const rows = foldRows([...tasks, ...after])
+  expect(rows.length).toBe(16)
+  // The newest eight calls, then the newest eight of the tasks; the eighth stands for the twenty-two older ones.
+  expect(rows.slice(0, 8).map(r => r.entry.startedAt)).toEqual([119, 118, 117, 116, 115, 114, 113, 112])
+  expect(rows.slice(8).map(r => r.entry.label)).toEqual(['task 29', 'task 28', 'task 27', 'task 26', 'task 25', 'task 24', 'task 23', 'task 22'])
+  expect(rows.slice(8).map(r => r.times)).toEqual([1, 1, 1, 1, 1, 1, 1, 23])
+  // Every one of the thirty is counted once.
+  expect(rows.slice(8).reduce((n, r) => n + r.times, 0)).toBe(30)
+})
+
+const stationOf = (command: string, tool = 'Bash') => classify(tool, { command }, STRANGER).station
+
+test('a command inside a loop, a condition, a group or a negation is still the command', () => {
+  expect(stationOf('for u in a b; do curl $u; done')).toBe('web')
+  expect(stationOf('if curl -sf x; then echo ok; fi')).toBe('web')
+  expect(stationOf('if test -f a; then echo ok; else wget x; fi')).toBe('web')
+  expect(stationOf('while ! curl -sf x; do sleep 1; done')).toBe('web')
+  expect(stationOf('until ping -c1 host; do sleep 1; done')).toBe('web')
+  expect(stationOf('! curl x')).toBe('web')
+  expect(stationOf('{ curl x; }')).toBe('web')
+  expect(stationOf('(cd /tmp && curl x)')).toBe('web')
+  // The words of the construct are no commands: a loop over files that only reads them is files.
+  expect(stationOf('for f in *.md; do cat $f; done')).toBe('files')
+  expect(stationOf('if grep -q x a.txt; then echo yes; fi')).toBe('files')
+  expect(stationOf('while read line; do echo $line; done')).toBe('shell')
+  expect(stationOf('for i in 1 2 3; do make test; done')).toBe('shell')
+  // A file named like a keyword is an argument, not a construct.
+  expect(stationOf('cat do then fi')).toBe('files')
+})
+
+test('a command handed to a shell, to eval or to watch is the command that counts', () => {
+  expect(stationOf('bash -c "curl https://x.y"')).toBe('web')
+  expect(stationOf("sh -c 'wget x'")).toBe('web')
+  expect(stationOf('zsh -lc "git fetch && make"')).toBe('web')
+  expect(stationOf('eval "curl x"')).toBe('web')
+  expect(stationOf('watch -n 5 curl x')).toBe('web')
+  expect(stationOf('find . -exec sh -c "curl x" \;')).toBe('web')
+  expect(stationOf('sudo bash -c "apt-get update && apt-get install -y jq"')).toBe('web')
+  expect(stationOf("bash -c 'cat a | sort'")).toBe('files')
+  expect(stationOf('bash -c "make build"')).toBe('shell')
+  // A script is not a command line: what it does is not read.
+  expect(stationOf('bash deploy.sh curl')).toBe('shell')
+  // Shells inside shells stop being read at some depth, and nothing breaks.
+  expect(stationOf(`bash -c "bash -c 'bash -c \\"bash -c curl\\"'"`)).not.toBe('files')
+})
+
+test('the text of a here-document is no command, whatever it says', () => {
+  expect(stationOf('cat <<EOF > f\ncurl x\nEOF')).toBe('files')
+  expect(stationOf("cat <<'EOF' > notes.md\nsome text\nwget y\nEOF")).toBe('files')
+  expect(stationOf('cat <<-EOF > f\n\tcurl x\n\tEOF')).toBe('files')
+  expect(stationOf('python3 - <<"PY"\nimport os\ncurl = 1\nPY')).toBe('shell')
+  // What follows the here-document is read again.
+  expect(stationOf('cat <<EOF > f\ntext\nEOF\ncurl x')).toBe('web')
+  expect(stationOf('cat <<A > a; cat <<B > b\none\nA\ncurl\nB\nls')).toBe('files')
+  // One that never ends is all text.
+  expect(stationOf('cat <<EOF > f\ncurl x')).toBe('files')
+  // A here-string is one word, and a shift is arithmetic.
+  expect(stationOf('grep x <<< "curl"')).toBe('files')
+  expect(stationOf('echo $((1 << 2)); curl x')).toBe('web')
+  // PowerShell has no here-documents of this kind.
+  expect(stationOf('Get-Content a.txt', 'PowerShell')).toBe('files')
+})
+
+test('a command line is read up to a length, and a long one costs no more than that', () => {
+  // Past the first eight thousand characters nothing is read: the label and the station come from what stands before.
+  const long = `ls ${'a'.repeat(9000)}; curl x`
+  expect(stationOf(long)).toBe('files')
+  expect(stationOf(`curl x; ls ${'a'.repeat(9000)}`)).toBe('web')
+  const pipes = 'x|'.repeat(100_000)
+  for (let i = 0; i < 3; i++) stationOf(pipes)
+  const t0 = performance.now()
+  stationOf(pipes)
+  const ms = performance.now() - t0
+  console.log(`COST naming a 200,000-character line of pipes: ${ms.toFixed(1)} ms`)
+  expect(ms).toBeLessThan(100)
+  const doc = `cat <<EOF > f\n${'line of text here\n'.repeat(11_000)}EOF\ncurl x`
+  for (let i = 0; i < 3; i++) stationOf(doc)
+  const t1 = performance.now()
+  // The command after a long here-document is still seen.
+  expect(stationOf(doc)).toBe('web')
+  const docMs = performance.now() - t1
+  console.log(`COST naming a 200,000-character here-document: ${docMs.toFixed(1)} ms`)
+  expect(docMs).toBeLessThan(100)
+})
+
+test('more commands that reach the network are known by name or by subcommand', () => {
+  for (const c of ['pip3.12 install x', 'pip3 download x', 'bun i', 'yarn', 'yarn --frozen-lockfile', 'git submodule update --init', 'git remote update', 'svn checkout u', 'hg clone u', 'kubectl get pods', 'aws s3 ls', 'gcloud auth list', 'az login', 'terraform apply', 'helm install x ./chart', 'nmap host', 'http GET x.y', 'openssl s_client -connect x:443', 'deno install']) {
+    expect([c, stationOf(c)]).toEqual([c, 'web'])
+  }
+  // The same programs at work on what is already here stay on Shell.
+  for (const c of ['yarn build', 'git submodule status', 'git remote -v', 'terraform fmt', 'helm template .', 'openssl sha256 a.bin', 'deno run a.ts', 'svn status', 'bunx cowsay', 'npx cowsay']) {
+    expect([c, stationOf(c)]).toEqual([c, 'shell'])
+  }
+})
