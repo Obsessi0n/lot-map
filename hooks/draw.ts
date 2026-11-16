@@ -1,7 +1,7 @@
 // How the board is drawn: one SVG, the agent in the centre and a station for each kind of work.
 // Nothing here touches the engine.
 import type { Board, Entry, StationId } from '../types'
-import { shortModel } from './classify'
+import { formatTokens, shortModel } from './classify'
 import { DARK, LIGHT, lightRules } from './palette'
 import type { Palette } from './palette'
 import { STATIONS } from './setup'
@@ -151,9 +151,19 @@ function trail(entries: readonly Entry[], now: number, c: Palette, isStill: bool
   return out
 }
 
-type Scene = { entries: Entry[]; board: Board; now: number; c: Palette; names: Strings['stations']; isStill: boolean; shift: number }
+type Scene = {
+  entries: Entry[]
+  board: Board
+  now: number
+  c: Palette
+  names: Strings['stations']
+  isStill: boolean
+  shift: number
+  /** The context each station's calls added, with `contextCost` on, where the count line says it too. */
+  spent: Board['spent'] | undefined
+}
 
-function station(s: (typeof STATIONS)[number], i: number, { entries, board, now, c, names, isStill, shift }: Scene): { under: string; over: string } {
+function station(s: (typeof STATIONS)[number], i: number, { entries, board, now, c, names, isStill, shift, spent }: Scene): { under: string; over: string } {
   const p = place(i, shift)
   const x = n1(p.x)
   const y = n1(p.y)
@@ -218,7 +228,10 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
     const asked = count - pushed
     const figures =
       pushed === 0 ? String(count) : `${asked > 0 ? `${asked} ` : ''}<tspan fill="${main}">↓${pushed}</tspan>`
-    over += `<text x="${x}" y="${n1(p.y + NODE + 28)}" text-anchor="middle" ${FONT} font-size="9.5" ${rim} fill="${c.dim}">${figures}</text>`
+    // With `contextCost`, after the counts, about how much the station's calls added to the context: in the counts' own colour.
+    const tokens = spent?.[s.id] ?? 0
+    const cost = tokens > 0 ? ` · ${formatTokens(tokens)}` : ''
+    over += `<text x="${x}" y="${n1(p.y + NODE + 28)}" text-anchor="middle" ${FONT} font-size="9.5" ${rim} fill="${c.dim}">${figures}${cost}</text>`
   }
 
   // Top right: how many run at once. Top left: what went wrong since the last message, until the next one.
@@ -238,7 +251,11 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
 }
 
 
-export function drawMap(board: Board, now: number, setup: Setup): string {
+/**
+ * The board as one SVG. With `withSpent`, and `contextCost` on, each station's count line also says how much of the
+ * context its calls added; for now only the desktop map asks for that.
+ */
+export function drawMap(board: Board, now: number, setup: Setup, withSpent = false): string {
   const c: Palette = { ...(setup.theme === 'light' ? LIGHT : DARK), ...setup.colors }
   // How many places the ring is turned. The stations keep their order, so the far side of the person is always the network.
   const shift = setup.layout === 'you-bottom' ? STATIONS.length / 2 : 0
@@ -275,7 +292,7 @@ export function drawMap(board: Board, now: number, setup: Setup): string {
     if (worn > 0) body += `${line} stroke="${s.id === 'memory' ? c.mem : c.accent}" opacity="${n1(worn * 0.55)}"/>`
   })
 
-  const scene: Scene = { entries: recent, board, now, c, names: setup.t.stations, isStill, shift }
+  const scene: Scene = { entries: recent, board, now, c, names: setup.t.stations, isStill, shift, spent: withSpent && setup.contextCost ? board.spent : undefined }
   const drawn = STATIONS.map((s, i) => station(s, i, scene))
   body += drawn.map(d => d.under).join('')
   body += trail(recent, now, c, isStill, shift)

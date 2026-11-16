@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Entry, StationId, Status } from '../types'
-import { MAP_ASPECT, STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, setupFrom, shortModel, taskNotice, taskOf } from './map'
+import { MAP_ASPECT, STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, formatTokens, memoryIds, nowParts, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 import { drawTerminalMap, terminalMap } from './terminal'
 
@@ -12,6 +12,13 @@ const KEEP = 80
 const LONG_LABEL = 28
 /** The least the time takes at the end of a row, so that short times line up: `107 ms`. A longer one widens its own row. */
 const TIME_COLUMN = 6
+/** The same with `contextCost`, which puts what a call added to the context after its time: `85 ms ~+42k`. */
+const TIME_AND_COST_COLUMN = 12
+/**
+ * One step's growth of the context is shared evenly among its calls when there are at most this many. With more, an
+ * even share says too little: a large read and a short command would each show the same. Their rows then get no figure.
+ */
+const SHARED_AT_MOST = 3
 const CREW = 12
 /** How many subagents' names are kept for their rows. */
 const CREW_NAMES = 32
@@ -22,7 +29,7 @@ const CREW_NAMES = 32
 const ZOOMS = [160, 200, 240, 280, 340, 400]
 
 // Change the tag when a field of Entry or Board changes: it declines what an earlier version stored.
-const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-3' })
+const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-4' })
 
 const newId = (now: number): string => `${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
@@ -128,10 +135,50 @@ async function settle($: EngineInterface, task: string, status: Status): Promise
   })
 }
 
-/** How full the context window is, as the status line has it; costs nothing. */
-async function contextOf($: EngineInterface): Promise<Pick<Board, 'context'>> {
-  const percent = await quietly(async () => (await $.session.usage()).context.percent)
-  return typeof percent === 'number' ? { context: percent } : {}
+/** How full the context window is, as the status line has it, and its tokens; costs nothing. */
+async function contextOf($: EngineInterface): Promise<{ patch: Pick<Board, 'context'>; tokens: number | undefined }> {
+  const context = await quietly(async () => (await $.session.usage()).context)
+  return {
+    patch: typeof context?.percent === 'number' ? { context: context.percent } : {},
+    tokens: typeof context?.tokens === 'number' ? context.tokens : undefined,
+  }
+}
+
+/**
+ * What one step of the main loop added to the context, put on the calls whose answers it was sent with.
+ *
+ * The engine reads the context as the input a response was answered over, so the calls of step N show in the reading
+ * of step N+1, and `before` and `after` are those two readings. The growth also holds the model's own words, what a hook
+ * added and, at the start of a turn, the message: an estimate, as the README says. A context that shrank, as at a
+ * compaction, puts nothing anywhere.
+ *
+ * One call takes all of it. Up to SHARED_AT_MOST share it evenly, marked as shared. Past that the rows get nothing, but
+ * when every call of the step was at one station there is no doubt where it went, and that station's sum gets it whole.
+ */
+async function charge($: EngineInterface, calls: readonly string[], before: number | undefined, after: number | undefined): Promise<void> {
+  if (before === undefined || after === undefined || calls.length === 0 || after <= before) return
+  const grown = after - before
+  await quietly(() =>
+    update($, board, b => {
+      const own = b.entries.filter(e => calls.includes(e.id))
+      if (own.length === 0) return b
+      const share = own.length <= SHARED_AT_MOST ? grown / own.length : undefined
+      const spent = { ...b.spent }
+      const add = (station: StationId, tokens: number): void => {
+        spent[station] = Math.round((spent[station] ?? 0) + tokens)
+      }
+      if (share !== undefined) for (const e of own) add(e.station, share)
+      else if (new Set(own.map(e => e.station)).size === 1 && own[0] !== undefined) add(own[0].station, grown)
+      return {
+        ...b,
+        spent,
+        entries:
+          share === undefined
+            ? b.entries
+            : b.entries.map(e => (calls.includes(e.id) ? { ...e, tokens: Math.round(share), ...(own.length > 1 ? { shared: true } : {}) } : e)),
+      }
+    }),
+  )
 }
 
 /** What a settings hook added to the context: shown as the hook acting and, when it brought records, as memory. */
@@ -184,6 +231,11 @@ export const register: Register = (on, options) => {
 
   // In a terminal, the map above the rows, as a picture or in braille dots, for a person who asked for it.
   const above = terminalMap(setup)
+
+  // With `contextCost`: the main loop's calls since its last model step, and the context that step was answered over.
+  // Lost with a reload, which costs at most one step's figures.
+  let waiting: string[] = []
+  let lastTokens: number | undefined
 
   on('session.start', async ($, e, next) => {
     await quietly(() => $.command.register({ name: 'lot-map', description: t.command }))
@@ -260,6 +312,9 @@ export const register: Register = (on, options) => {
         })
       }
     }
+    // The calls whose answers this step is sent with: those made since the last step. A call this step starts is the next one's.
+    const answered = isMain ? waiting : []
+    if (isMain) waiting = []
     const id = await begin($, {
       station: 'model',
       label: `${shortModel(e.model)} · ${t.step(e.index + 1)}${isMain ? '' : ` · ${crew.get(e.agentId ?? '') ?? t.subagent}`}`,
@@ -269,7 +324,16 @@ export const register: Register = (on, options) => {
     try {
       return yield* next(e)
     } finally {
-      await finish($, id, 'ok', isMain ? await contextOf($) : undefined)
+      if (isMain) {
+        const context = await contextOf($)
+        await finish($, id, 'ok', context.patch)
+        if (setup.contextCost) {
+          await charge($, answered, lastTokens, context.tokens)
+          lastTokens = context.tokens
+        }
+      } else {
+        await finish($, id, 'ok')
+      }
     }
   })
 
@@ -286,6 +350,8 @@ export const register: Register = (on, options) => {
         }))
       })
     } else {
+      // What the last step's calls added would show only in the next turn's first reading, beside the next message: none.
+      waiting = []
       await begin($, {
         station: 'you',
         label: e.isAborted ? t.turnAborted : t.answerReady,
@@ -309,6 +375,8 @@ export const register: Register = (on, options) => {
       const seen = classify(e.tool, e as unknown as Record<string, unknown>, setup)
       return begin($, { ...seen, ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
+    // A subagent's calls fill its own context, which the engine does not report: only the main loop's are counted.
+    if (setup.contextCost && id !== undefined && e.agentId === undefined) waiting.push(id)
     try {
       const ran = await next(e)
       const wasRefused = ran.deny !== undefined || (e.tool_use_id !== undefined && refused.delete(e.tool_use_id))
@@ -380,10 +448,13 @@ export const register: Register = (on, options) => {
 
   on('session.compact', async ($, e, next) => {
     const id = await begin($, { station: 'model', label: t.compacting })
+    // After a compaction the context starts again: no call before it gets a figure, and the next step only sets the mark.
+    waiting = []
+    lastTokens = undefined
     try {
       return await next(e)
     } finally {
-      await finish($, id, 'ok', await contextOf($))
+      await finish($, id, 'ok', (await contextOf($)).patch)
     }
   })
 
@@ -404,13 +475,16 @@ export const register: Register = (on, options) => {
       }
     }
 
-    const rows = foldRows(state.entries, undefined, setup.subagentNames).map(({ entry, times, tookMs }) => {
+    const rows = foldRows(state.entries, undefined, setup.subagentNames).map(({ entry, times, tookMs, tokens, isShared }) => {
       const isSwitch = entry.mark === 'switch'
       const mark = isSwitch ? '◆' : entry.status === 'run' ? '●' : entry.status === 'ok' ? '·' : '✕'
       const whole = turnMs.get(entry.id)
       // A row of one moment (a message, what a hook added) took no time: its place in the column holds a dash.
       const took = entry.endedAt === undefined ? t.running : whole !== undefined && whole > 0 ? formatMs(whole, t) : tookMs > 0 ? formatMs(tookMs, t) : '—'
       const isMoment = took === '—'
+      // With `contextCost`, what the call added to the context stands after its time, in the time's own colour: whatever
+      // reads on this theme for the time reads for the figure. A call whose step was not read yet has none.
+      const cost = setup.contextCost && tokens !== undefined ? ` ${isShared ? '~' : ''}+${formatTokens(tokens)}` : ''
       // Theme keys, so the rows read on a light theme as well as on a dark one. A running row is not in Claude's own
       // colour: on a light theme that one stands next to the colour of a failure, and a running call read as a failed one.
       const color = entry.status === 'run' ? 'ide' : isSwitch ? 'claude' : entry.status === 'ok' ? undefined : 'error'
@@ -438,9 +512,9 @@ export const register: Register = (on, options) => {
                 />,
               ]
             : []}
-          <Box flexShrink={0} minWidth={TIME_COLUMN} justifyContent="flex-end">
+          <Box flexShrink={0} minWidth={setup.contextCost ? TIME_AND_COST_COLUMN : TIME_COLUMN} justifyContent="flex-end">
             <Text mono tabular size={size} color={isMoment ? undefined : color} dimColor={isDim || isMoment} wrap="truncate-end">
-              {took}
+              {`${took}${cost}`}
             </Text>
           </Box>
         </Box>
@@ -499,7 +573,8 @@ export const register: Register = (on, options) => {
     }
     const isEditor = e.surface === 'vscode'
     const zoom = isEditor ? state.zoom : undefined
-    const map = <Svg source={drawMap(state, now, setup)} alt={`${t.title}. ${describeNow(state, t)}`} {...(zoom !== undefined ? { width: zoom, height: Math.round(zoom * MAP_ASPECT) } : {})} />
+    // Each station's share of the context is on the desktop map only, for now; the editor's map is drawn too small for it.
+    const map = <Svg source={drawMap(state, now, setup, e.surface === 'desktop')}alt={`${t.title}. ${describeNow(state, t)}`} {...(zoom !== undefined ? { width: zoom, height: Math.round(zoom * MAP_ASPECT) } : {})} />
     if (!isEditor) {
       return (
         <Box flexDirection="column">

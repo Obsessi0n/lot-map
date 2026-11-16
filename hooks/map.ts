@@ -8,7 +8,7 @@
 export { STATIONS, setupFrom } from './setup'
 export type { Setup } from './setup'
 export { COLOR_NAMES } from './palette'
-export { classify, clean, firstLine, formatMs, memoryIds, shortModel } from './classify'
+export { classify, clean, firstLine, formatMs, formatTokens, memoryIds, shortModel } from './classify'
 export type { Classified } from './classify'
 export { MAP_ASPECT, TRAIL_FADE_MS, TRAIL_HOLD_MS, drawMap, routeOf } from './draw'
 export { describeNow, foldRows, nowParts, taskNotice, taskOf } from './feed'

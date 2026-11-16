@@ -85,6 +85,18 @@ Below the map are a line that says what runs now, and the last 16 rows: `●` ru
 
 Each row is one line. Its words are cut at the pane's edge; its time stands in a column at the right, with a dash for what took none, such as a message arriving, and on the answer's row the length of the whole turn. A row with a long label has a `▸` before its time: press it to read the row whole, and again to close it. One row is open at a time. In a terminal the line of now also holds the context percentage and the model at its right, since no drawing is there to show them.
 
+### What each call adds to the context
+
+The ring says how full the context window is, not what filled it. With `contextCost` on, a call's row says about how many tokens the context grew by with its answer, after its time: `85 ms +42k`. On the desktop map each station's count line adds the sum for the session: `9 · 180k`. The figure takes the colour of what stands beside it, the time on the row and the count on the map, so it reads wherever they do, on a light theme and on a dark one.
+
+It is an estimate. Claude Code tells a mod how many tokens the last response was answered over, so the mod sees how much the context grew from one model step to the next, and puts that on the calls whose answers went with the step. The growth also holds the model's own words, what hooks added and, at the start of a turn, your message.
+
+- **One step late.** A call's figure shows when the next step has been answered, not when the call ends. A call made in the last step of a turn, before an interrupted turn or before a compaction never gets one, and a compaction, which makes the context smaller, puts nothing anywhere.
+- **Shared.** Two or three calls in one step share its growth evenly, and their figures are marked `~`: `~+14k`. With more calls in one step their rows get none, since an even share would give a large read and a short command the same figure; when all of them were at one station, that station's sum still gets the whole of it. A folded row adds up its calls' figures, marked `~` when some of them have none.
+- **The main loop only.** A subagent fills a context of its own, which Claude Code does not report: its calls get no figure. The growth its answer brought shows on the main loop's call that started it.
+
+For now the sums are on the desktop map only: VS Code's map, the terminal picture and the braille map show the rows' figures and not the sums.
+
 | At work | Subagents | A hook refuses |
 | --- | --- | --- |
 | ![At work](docs/map-working.png) | ![Subagents](docs/map-agents.png) | ![A hook refuses](docs/map-blocked.png) |
@@ -155,6 +167,7 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | `hookRecords` | `false` | turn on if a hook of yours adds memory records numbered like `[#123]`; they appear on Memory by number only. Such a number in the text of any hook counts, not only a memory hook's |
 | `hookReasons` | `false` | show the first line of a hook's refusal, up to 72 characters; off, the map says only which tool was stopped |
 | `subagentNames` | `false` | a subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters; off, it says only that it is a subagent |
+| `contextCost` | `false` | each row says about how many tokens the context grew by with its call's answer, and the desktop map adds each station's sum to its count. An estimate, shown one step late; see [What each call adds to the context](#what-each-call-adds-to-the-context) |
 | `theme` | `auto` | the map's colours: `dark`, `light`, or `auto`, which is dark on a dark surface and light on a light one |
 | `background` | `solid` | the map's own background, or `transparent`, which lets the pane behind it show through. The rim around the labels keeps the background's colour, so on a surface of another shade it shows as a faint halo |
 | `colors` | none | colours of your own, each as `name=#rrggbb`; see [Colours of your own](#colours-of-your-own) |
@@ -207,7 +220,7 @@ The mod makes no network requests, reads no files, runs no processes, calls no m
 
 Like any mod that follows tool calls, it is handed every call's whole input, including command lines and the text written to files. It takes names from that and nothing else; the code that does so is `classify` in `hooks/classify.ts`. A marketplace added from this repository follows its `main` branch, so an update brings whatever is there: read the diff before updating if that matters to you.
 
-It asks Claude Code for one thing: how full the context window is, after each model step. Between sessions it keeps one thing, the name of the model last used in each folder, so that it can show a change. Each is stored under the folder's full path, in Claude Code's own store for the plugin.
+It asks Claude Code for one thing: how full the context window is, after each model step. With `contextCost` on it also keeps, from the same answer, how many tokens that is, and puts a number on each row and station; it reads nothing more for it. Between sessions it keeps one thing, the name of the model last used in each folder, so that it can show a change. Each is stored under the folder's full path, in Claude Code's own store for the plugin.
 
 What its hooks do. The mod listens to the session's start, prompts, turns, model steps, tool calls, skills, compaction, with `subagentNames` on a subagent's start, and to three events of settings hooks: `PreToolUse`, where it sees whether a hook refused the call, asked for permission or took a moment, and `UserPromptSubmit` and `SessionStart`, where it sees the context a hook added. Each of its hooks passes the event on as it came and returns what came back as it was: it changes no input, no result, no context and no permission decision, and makes none of its own. Its one command, `/lot-map`, opens the pane.
 

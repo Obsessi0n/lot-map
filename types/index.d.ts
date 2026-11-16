@@ -20,6 +20,10 @@ export type Entry = {
   task?: string
   /** A moment the map marks: the model changed, or the answer is ready. */
   mark?: 'switch' | 'done'
+  /** With `contextCost`: about how many tokens the context grew by with this call's answer. A number, never content. */
+  tokens?: number
+  /** The growth was one step's, shared evenly with the other calls of that step: shown with `~`. */
+  shared?: boolean
 }
 
 export type Board = {
@@ -35,6 +39,8 @@ export type Board = {
   agents?: string[]
   /** How full the context window is, 0 to 100. */
   context?: number
+  /** With `contextCost`: about how many tokens each station's calls added to the context this session. */
+  spent?: Partial<Record<StationId, number>>
   /** When the model last changed. */
   switchedAt?: number
   /** The row of the feed the person opened to read whole: its entry's id. */
