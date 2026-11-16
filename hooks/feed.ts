@@ -5,7 +5,27 @@ import { shortModel } from './classify'
 import type { Strings } from './text'
 
 /** A row of the feed: one entry, or several finished ones in a row at one station, shown as the newest of them. */
-export type Row = { entry: Entry; times: number; tookMs: number }
+export type Row = {
+  entry: Entry
+  times: number
+  tookMs: number
+  /** With `contextCost`: the tokens the row's calls added to the context, where any of them has a figure. */
+  tokens?: number
+  /** The figure is not all of it: one call's share of a step, or a folded row some of whose calls have none. */
+  isShared?: boolean
+}
+
+/** A row of one entry, with its share of the context if it has one. */
+const rowOf = (e: Entry, took: number): Row => ({ entry: e, times: 1, tookMs: took, ...(e.tokens !== undefined ? { tokens: e.tokens, ...(e.shared ? { isShared: true } : {}) } : {}) })
+
+/** One more call folded into a row: its time, and its tokens, which make the figure partial when only one side has any. */
+function fold(row: Row, e: Entry, took: number): void {
+  row.times++
+  row.tookMs += took
+  if (e.tokens === undefined && row.tokens === undefined) return
+  if (e.tokens === undefined || row.tokens === undefined || e.shared) row.isShared = true
+  row.tokens = (row.tokens ?? 0) + (e.tokens ?? 0)
+}
 
 const isPlain = (e: Entry): boolean => e.status === 'ok' && e.mark === undefined
 
@@ -31,8 +51,7 @@ export function foldRows(entries: readonly Entry[], max = 16, apart = false): Ro
     const took = e.endedAt === undefined ? 0 : Math.max(0, e.endedAt - e.startedAt)
     const last = rows[rows.length - 1]
     if (!isCut && last !== undefined && isPlain(e) && isPlain(last.entry) && last.entry.station === e.station && last.entry.from === e.from && (!apart || last.entry.agentId === e.agentId)) {
-      last.times++
-      last.tookMs += took
+      fold(last, e, took)
       continue
     }
     if (rows.length >= max) {
@@ -40,11 +59,11 @@ export function foldRows(entries: readonly Entry[], max = 16, apart = false): Ro
       isCut = true
       if (e.status !== 'run') continue
       const oldest = running[running.length - 1]
-      if (running.length < held || oldest === undefined) running.push({ entry: e, times: 1, tookMs: took })
+      if (running.length < held || oldest === undefined) running.push(rowOf(e, took))
       else oldest.times++
       continue
     }
-    rows.push({ entry: e, times: 1, tookMs: took })
+    rows.push(rowOf(e, took))
   }
   return running.length === 0 ? rows : [...rows.slice(0, max - running.length), ...running]
 }

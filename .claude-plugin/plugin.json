@@ -91,6 +91,12 @@
       "default": false,
       "description": "A subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters. Off, it says only that it is a subagent."
     },
+    "contextCost": {
+      "type": "boolean",
+      "title": "What each call adds to the context",
+      "default": false,
+      "description": "Each row says about how many tokens the context grew by with its call's answer, and the desktop map adds each station's sum to its count. An estimate: the growth of one model step, which also holds the model's own words, what hooks added and, at the start of a turn, the message, shared among that step's calls. It shows one step late, and a call whose step was the last of a turn gets none."
+    },
     "theme": {
       "type": "string",
       "title": "Colours",

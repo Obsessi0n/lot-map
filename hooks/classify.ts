@@ -445,6 +445,17 @@ export function formatMs(ms: number, t: Strings): string {
   return ms < 1000 ? t.ms(Math.max(1, Math.round(ms))) : ms < 60000 ? t.seconds((ms / 1000).toFixed(1)) : t.minutes(Math.floor(ms / 60000), Math.round((ms % 60000) / 1000))
 }
 
+/**
+ * A count of tokens, short and in whole numbers: `420`, `42k`, `2M`. Whole, so that no language needs its own decimal
+ * mark, and short, so that it fits a row's time column and a station's count line.
+ */
+export function formatTokens(tokens: number): string {
+  const n = Math.max(0, Math.round(tokens))
+  if (n < 1000) return String(n)
+  const k = Math.round(n / 1000)
+  return k < 1000 ? `${k}k` : `${Math.round(n / 1_000_000)}M`
+}
+
 /** The first line of a hook's refusal, cut short: the lines after it may repeat the whole command. */
 export function firstLine(text: string, max = 72): string {
   const line = (text.split('\n').find(l => l.trim() !== '') ?? '').trim()
