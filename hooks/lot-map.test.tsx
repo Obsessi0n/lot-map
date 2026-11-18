@@ -410,7 +410,7 @@ test('the braille map has room for every station\'s name, whole and beside all i
         const spent = Object.fromEntries(STATIONS.map(s => [s.id, 456_000]))
         const summed = rowsOf(paintBraille({ entries: [], counts: board.counts, spent }, 1_000_000, costly, columns, rows)).join('\n')
         const isRoom = sumsFit(costly, columns, rows, board.counts)
-        for (const name of Object.values(costly.t.stations)) expect(summed).toContain(isRoom ? `${name} 888 456k` : `${name} 888`)
+        for (const name of Object.values(costly.t.stations)) expect(summed).toContain(isRoom ? `${name} 888 +456k` : `${name} 888`)
         expect(summed.includes('456k')).toBe(isRoom)
       }
     }

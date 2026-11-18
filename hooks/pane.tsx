@@ -130,8 +130,8 @@ export async function drawPane($: EngineInterface, e: PaneInput, setup: Setup, a
   )
 
   if (e.surface === 'terminal') {
-    // With `contextCost`, each station's sum after its count, as the braille map writes it: `Files 9 180k`.
-    const sum = (id: StationId): string => (setup.contextCost && (state.spent?.[id] ?? 0) > 0 ? ` ${formatTokens(state.spent?.[id] ?? 0)}` : '')
+    // With `contextCost`, each station's sum after its count, as the braille map writes it: `Files 9 +180k`.
+    const sum = (id: StationId): string => (setup.contextCost && (state.spent?.[id] ?? 0) > 0 ? ` +${formatTokens(state.spent?.[id] ?? 0)}` : '')
     const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}${sum(s.id)}`).join(' · ')
     const map = await quietly(() => drawTerminalMap($, e, state, now, above))
     return (

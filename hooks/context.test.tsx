@@ -114,7 +114,7 @@ test('a call gets what the context grew by, one step late, on its row on every s
   for (const surface of ['desktop', 'terminal', 'vscode'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     // The figure stands after the time, in the same text and so in the same colour as the time.
-    const time = await ui.find({ type: 'Text', text: /\+42k$/ })
+    const time = await ui.find({ type: 'Text', text: /ms \+42k$/ })
     expect(time?.text).toMatch(/^\d+ ms \+42k$/)
     await ui.unmount()
   }
@@ -139,7 +139,7 @@ test('each station\'s sum stands after its count on the desktop map, on the edit
   await editor.unmount()
   // A terminal with the rows alone has no drawing: the sum goes after the count in the line of counts, as braille writes it.
   const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await term.find({ type: 'Text', text: /Files 2 50k/ }))?.text).toMatch(/Model \d+ · Files 2 50k$/)
+  expect((await term.find({ type: 'Text', text: /Files 2 \+50k/ }))?.text).toMatch(/Model \d+ · Files 2 \+50k$/)
   await term.unmount()
 })
 
@@ -195,18 +195,37 @@ test('the braille map writes each station\'s sum after its count, in the colour 
   for (const options of [{ theme: 'dark' }, { theme: 'light' }, { background: 'transparent' }, { theme: 'light', background: 'transparent' }, { colors: 'label=#445566' }]) {
     const cells = paintBraille(SPENT, 1_000_000, setupFrom({ ...options, contextCost: true }), 60, 21)
     const grid = rowsOf(cells).join('\n')
-    expect(grid).toContain('Files 12 182k')
-    expect(grid).toContain('Shell 48 9k')
-    expect(grid).toContain('Memory 5 12k')
+    expect(grid).toContain('Files 12 +182k')
+    expect(grid).toContain('Shell 48 +9k')
+    expect(grid).toContain('Memory 5 +12k')
     // What went wrong keeps its place after the sum.
-    expect(grid).toContain('Network 7 61k !1')
+    expect(grid).toContain('Network 7 +61k !1')
     // A station that took calls and added nothing that was read has its count alone.
     expect(grid).toMatch(/Model 31(?! \d)/)
     // One colour from the first letter of the name to the last of the sum: whatever reads for the name reads for the sum.
-    expect(new Set(inkAt(cells, 'Files 12 182k')).size).toBe(1)
+    expect(new Set(inkAt(cells, 'Files 12 +182k')).size).toBe(1)
   }
   // Without the option, no sum.
-  expect(rowsOf(paintBraille(SPENT, 1_000_000, setupFrom({}), 60, 21)).join('\n')).toMatch(/Files 12(?! \d)/)
+  expect(rowsOf(paintBraille(SPENT, 1_000_000, setupFrom({}), 60, 21)).join('\n')).toMatch(/Files 12(?! [\d+])/)
+})
+
+test('a sum under a thousand stands apart from its count by its plus, on the braille map and in the line of counts', { options: COST }, async ($, on) => {
+  // `Files 3 690` would read as three thousand six hundred and ninety.
+  const small: Board = { entries: [], counts: { files: 3, shell: 1, web: 7 }, spent: { files: 690, shell: 104, web: 61_000 }, faults: { web: 1 } }
+  const grid = rowsOf(paintBraille(small, 1_000_000, setupFrom({ contextCost: true }), 60, 21)).join('\n')
+  expect(grid).toContain('Files 3 +690')
+  expect(grid).toContain('Shell 1 +104')
+  expect(grid).toContain('Network 7 +61k !1')
+  expect(grid).not.toMatch(/\d \d/)
+
+  const k = kit($, on)
+  await k.step(0)
+  await k.call('Read', { file_path: '/a/b/small.ts' })
+  k.set(10_690)
+  await k.step(1)
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await term.find({ type: 'Text', text: /Files 1 \+690/ }))?.text).toMatch(/Files 1 \+690$/)
+  await term.unmount()
 })
 
 test('where a grid has no room for every station\'s sum the braille map draws none of them, and keeps every name whole', () => {
@@ -220,11 +239,11 @@ test('where a grid has no room for every station\'s sum the braille map draws no
   // The widest grid has the room, for the same board.
   expect(sumsFit(setup, 76, 21, crowded.counts)).toBe(true)
   const wide = rowsOf(paintBraille(crowded, 1_000_000, setup, 76, 21)).join('\n')
-  for (const name of Object.values(setup.t.stations)) expect(wide).toContain(`${name} 888 123k`)
+  for (const name of Object.values(setup.t.stations)) expect(wide).toContain(`${name} 888 +123k`)
   // It goes by the room the widest sum would take, so a sum that grows never takes the others away.
   expect(sumsFit(setup, 60, 21, SPENT.counts)).toBe(true)
   for (const tokens of [1, 999, 1000, 999_000, 5_000_000]) {
-    expect(rowsOf(paintBraille({ ...SPENT, spent: { files: tokens } }, 1_000_000, setup, 60, 21)).join('\n')).toContain(`Files 12 ${formatTokens(tokens)}`)
+    expect(rowsOf(paintBraille({ ...SPENT, spent: { files: tokens } }, 1_000_000, setup, 60, 21)).join('\n')).toContain(`Files 12 +${formatTokens(tokens)}`)
   }
 })
 

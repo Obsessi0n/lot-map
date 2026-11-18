@@ -243,8 +243,8 @@ export function placesOf(setup: Setup, columns: number, rows: number): { id: Sta
   return ringOf(setup, columns, rows).places.map(p => ({ id: p.id, column: p.x / 2 - 2, row: p.y / 4 - 1, nameRow: p.isUpper ? p.y / 4 - 2 : p.y / 4 + 1 }))
 }
 
-/** The most a station's sum takes after its count: a space and `999k`. */
-const SUM_WIDTH = 5
+/** The most a station's sum takes after its count: a space and `+999k`. */
+const SUM_WIDTH = 6
 
 /**
  * Whether every station's name has room for its count and its sum of `contextCost` on a grid of this size: whole, on
@@ -273,7 +273,7 @@ export function sumsFit(setup: Setup, columns: number, rows: number, counts: Boa
 
 // ---- the map -------------------------------------------------------------------------------------
 
-const isBad =(e: Entry): boolean => e.status === 'block' || e.status === 'err'
+const isBad = (e: Entry): boolean => e.status === 'block' || e.status === 'err'
 
 /** The map at `now`, on `columns` by `rows` cells: the stations in a ring around the core, a spoke to each, pulses on the spokes. */
 export function paintBraille(board: Board, now: number, setup: Setup, columns: number, rows: number): Cells {
@@ -387,7 +387,8 @@ export function paintBraille(board: Board, now: number, setup: Setup, columns: n
   }
 
   // With `contextCost`, about how much each station's calls added to the context, after its count and in its name's
-  // colour: for every station, or for none where the grid has no room for them all.
+  // colour: for every station, or for none where the grid has no room for them all. It carries the plus the rows'
+  // figures do: without it a count and a sum under a thousand read as one number, `3 690`.
   const spent = setup.contextCost && sumsFit(setup, columns, rows, board.counts) ? board.spent : undefined
 
   places.forEach((p, i) => {
@@ -395,7 +396,7 @@ export function paintBraille(board: Board, now: number, setup: Setup, columns: n
     if (st === undefined) return
     const faults = board.faults?.[p.id] ?? 0
     const tokens = spent?.[p.id] ?? 0
-    const name = `${names[p.id]}${st.count > 0 ? ` ${st.count}` : ''}${tokens > 0 ? ` ${formatTokens(tokens)}` : ''}`
+    const name = `${names[p.id]}${st.count > 0 ? ` ${st.count}` : ''}${tokens > 0 ? ` +${formatTokens(tokens)}` : ''}`
     // Beside the name: how many run at once, and what went wrong since the last message.
     const many = st.running > 1 ? ` x${st.running}` : ''
     const wrong = faults > 0 ? ` !${faults > 99 ? '99+' : faults}` : ''

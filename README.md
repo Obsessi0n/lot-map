@@ -95,9 +95,9 @@ It is an estimate. Claude Code tells a mod how many tokens the last response was
 - **Shared.** Two or three calls in one step share its growth evenly, and their figures are marked `~`: `~+14k`. With more calls in one step their rows get none, since an even share would give a large read and a short command the same figure; when all of them were at one station, that station's sum still gets the whole of it. A folded row adds up its calls' figures, marked `~` when some of them have none.
 - **The main loop only.** A subagent fills a context of its own, which Claude Code does not report: its calls get no figure. The growth its answer brought shows on the main loop's call that started it.
 
-The sums are on every drawing of the map: the desktop app's, VS Code's and the terminal picture, which are one drawing, and the braille map, which writes a station's sum after its count, in the colour of its name: `Files 9 180k`. A terminal that shows the rows alone has them in its line of counts, written the same way.
+The sums are on every drawing of the map: the desktop app's, VS Code's and the terminal picture, which are one drawing, and the braille map, which writes a station's sum after its count, in the colour of its name and with the plus the rows' figures carry: `Files 9 +180k`. A terminal that shows the rows alone has them in its line of counts, written the same way.
 
-The braille map draws the sums for every station or for none. Where its grid has no room for the widest sum beside every name, in a narrow pane or with long names and large counts, it leaves them all off, keeps every name whole, and the rows still have their figures. English names and counts under a hundred fit from 50 columns; with counts of three digits at every station they need up to 68.
+The braille map draws the sums for every station or for none. Where its grid has no room for the widest sum beside every name, in a narrow pane or with long names and large counts, it leaves them all off, keeps every name whole, and the rows still have their figures. English names with counts under ten fit from 50 columns; with larger counts at every station they need up to 68.
 
 | At work | Subagents | A hook refuses |
 | --- | --- | --- |
@@ -127,7 +127,7 @@ With `terminalView` set to `braille`, the map stands above the rows as cells of 
 
 It is the same board, read the same way, with what a cell can carry:
 
-- **Stations.** An empty ring has not been used yet, a ring with a dot has, and a full one is at work now and beats. A station that just finished stays bright for a few seconds. Red is an error or a refusal, and `!1` after the name counts them until your next message; `x3` is how many calls run there at once. With `contextCost` on, the station's sum stands after its count, where the grid has room for every station's: `Files 9 180k`.
+- **Stations.** An empty ring has not been used yet, a ring with a dot has, and a full one is at work now and beats. A station that just finished stays bright for a few seconds. Red is an error or a refusal, and `!1` after the name counts them until your next message; `x3` is how many calls run there at once. With `contextCost` on, the station's sum stands after its count, where the grid has room for every station's: `Files 9 +180k`.
 - **Spokes.** A spoke takes its station's colour with the first call and a second line with much use. It lights when a call starts; a pulse flies out along it, and back when the call ends. What a hook brought unasked flies in from its station.
 - **The centre.** Its outline is the context window, filling clockwise from the top, amber at 70% and red at 90%, with the percentage over the name and the model under it. The model's name is bright for a few seconds after a change. One ring leaves the centre when the answer is ready.
 - **Subagents.** Each one still at work circles the Agents station as a dot.
