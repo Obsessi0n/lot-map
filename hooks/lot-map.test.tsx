@@ -3,7 +3,7 @@ import type { TestBody } from 'claude-code/testing'
 
 import type { Board } from '../types'
 import type { Entry } from '../types'
-import { paintBraille, rowsOf } from './braille'
+import { paintBraille, rowsOf, sumsFit } from './braille'
 import { COLOR_NAMES, STATIONS, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, keepNewest, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import { hasGlyph } from './raster'
 import { stringsFor } from './text'
@@ -389,7 +389,7 @@ test('every language has every word, in a table of its own', () => {
 
 test('the terminal picture\'s font has every letter the map writes, in every language', () => {
   const words = LANGUAGES.flatMap(language => Object.values(stringsFor(language).stations))
-  const missing = [...new Set([...words.join(''), ...'0123456789%×↓→·…◆+ abcdefghijklmnopqrstuvwxyz.CLAUDE'])].filter(ch => !hasGlyph(ch))
+  const missing = [...new Set([...words.join(''), ...'0123456789%×↓→·…◆+ abcdefghijklmnopqrstuvwxyz.CLAUDEM'])].filter(ch => !hasGlyph(ch))
   expect(missing).toEqual([])
 })
 
@@ -405,6 +405,13 @@ test('the braille map has room for every station\'s name, whole and beside all i
         for (const name of Object.values(setup.t.stations)) expect(grid).toContain(`${name} 888 !99+`)
         // Every letter of the language is one a cell holds: none became a question mark.
         expect(grid).not.toContain('?')
+        // With `contextCost` the sums are drawn for all the stations or for none: either way no name is cut.
+        const costly = setupFrom({ language, layout, contextCost: true })
+        const spent = Object.fromEntries(STATIONS.map(s => [s.id, 456_000]))
+        const summed = rowsOf(paintBraille({ entries: [], counts: board.counts, spent }, 1_000_000, costly, columns, rows)).join('\n')
+        const isRoom = sumsFit(costly, columns, rows, board.counts)
+        for (const name of Object.values(costly.t.stations)) expect(summed).toContain(isRoom ? `${name} 888 456k` : `${name} 888`)
+        expect(summed.includes('456k')).toBe(isRoom)
       }
     }
   }

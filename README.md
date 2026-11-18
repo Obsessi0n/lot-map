@@ -87,7 +87,7 @@ Each row is one line. Its words are cut at the pane's edge; its time stands in a
 
 ### What each call adds to the context
 
-The ring says how full the context window is, not what filled it. With `contextCost` on, a call's row says about how many tokens the context grew by with its answer, after its time: `85 ms +42k`. On the desktop map each station's count line adds the sum for the session: `9 · 180k`. The figure takes the colour of what stands beside it, the time on the row and the count on the map, so it reads wherever they do, on a light theme and on a dark one.
+The ring says how full the context window is, not what filled it. With `contextCost` on, a call's row says about how many tokens the context grew by with its answer, after its time: `85 ms +42k`. On the map each station's count line adds the sum for the session: `9 · 180k`. The figure takes the colour of what stands beside it, the time on the row and the count on the map, so it reads wherever they do, on a light theme and on a dark one.
 
 It is an estimate. Claude Code tells a mod how many tokens the last response was answered over, so the mod sees how much the context grew from one model step to the next, and puts that on the calls whose answers went with the step. The growth also holds the model's own words, what hooks added and, at the start of a turn, your message.
 
@@ -95,7 +95,9 @@ It is an estimate. Claude Code tells a mod how many tokens the last response was
 - **Shared.** Two or three calls in one step share its growth evenly, and their figures are marked `~`: `~+14k`. With more calls in one step their rows get none, since an even share would give a large read and a short command the same figure; when all of them were at one station, that station's sum still gets the whole of it. A folded row adds up its calls' figures, marked `~` when some of them have none.
 - **The main loop only.** A subagent fills a context of its own, which Claude Code does not report: its calls get no figure. The growth its answer brought shows on the main loop's call that started it.
 
-For now the sums are on the desktop map only: VS Code's map, the terminal picture and the braille map show the rows' figures and not the sums.
+The sums are on every drawing of the map: the desktop app's, VS Code's and the terminal picture, which are one drawing, and the braille map, which writes a station's sum after its count, in the colour of its name: `Files 9 180k`. A terminal that shows the rows alone has them in its line of counts, written the same way.
+
+The braille map draws the sums for every station or for none. Where its grid has no room for the widest sum beside every name, in a narrow pane or with long names and large counts, it leaves them all off, keeps every name whole, and the rows still have their figures. English names and counts under a hundred fit from 50 columns; with counts of three digits at every station they need up to 68.
 
 | At work | Subagents | A hook refuses |
 | --- | --- | --- |
@@ -125,7 +127,7 @@ With `terminalView` set to `braille`, the map stands above the rows as cells of 
 
 It is the same board, read the same way, with what a cell can carry:
 
-- **Stations.** An empty ring has not been used yet, a ring with a dot has, and a full one is at work now and beats. A station that just finished stays bright for a few seconds. Red is an error or a refusal, and `!1` after the name counts them until your next message; `x3` is how many calls run there at once.
+- **Stations.** An empty ring has not been used yet, a ring with a dot has, and a full one is at work now and beats. A station that just finished stays bright for a few seconds. Red is an error or a refusal, and `!1` after the name counts them until your next message; `x3` is how many calls run there at once. With `contextCost` on, the station's sum stands after its count, where the grid has room for every station's: `Files 9 180k`.
 - **Spokes.** A spoke takes its station's colour with the first call and a second line with much use. It lights when a call starts; a pulse flies out along it, and back when the call ends. What a hook brought unasked flies in from its station.
 - **The centre.** Its outline is the context window, filling clockwise from the top, amber at 70% and red at 90%, with the percentage over the name and the model under it. The model's name is bright for a few seconds after a change. One ring leaves the centre when the answer is ready.
 - **Subagents.** Each one still at work circles the Agents station as a dot.
@@ -172,7 +174,7 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | `hookReasons` | `false` | show the first line of a hook's refusal, up to 72 characters; off, the map says only which tool was stopped |
 | `guardedHooks` | `true` | turn off on a Team or Enterprise login where the transcript gets notices like `lot-map: its classic.PreToolUse hook was skipped`. An organisation's guard keeps mods away from five events there, and with this off the mod adds no hook on them. The map then loses the Hooks station, the records a hook adds, the row of a typed slash command and the mark of a compaction; a call a hook refused still gets its `✕`, as a failed call and not as a blocked one |
 | `subagentNames` | `false` | a subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters; off, it says only that it is a subagent |
-| `contextCost` | `false` | each row says about how many tokens the context grew by with its call's answer, and the desktop map adds each station's sum to its count. An estimate, shown one step late; see [What each call adds to the context](#what-each-call-adds-to-the-context) |
+| `contextCost` | `false` | each row says about how many tokens the context grew by with its call's answer, and the map adds each station's sum to its count. An estimate, shown one step late; see [What each call adds to the context](#what-each-call-adds-to-the-context) |
 | `contextWindow` | `model` | what the ring and its percentage measure the context against: `model`, the model's whole window, as the status line does; or `compaction`, the auto-compact window, such as one set with `autoCompactWindow`, where it is smaller than the model's. Without one, or with auto-compaction off, `compaction` shows the same as `model` |
 | `theme` | `auto` | the map's colours: `dark`, `light`, or `auto`, which is dark on a dark surface and light on a light one |
 | `background` | `solid` | the map's own background, or `transparent`, which lets the pane behind it show through. The rim around the labels keeps the background's colour, so on a surface of another shade it shows as a faint halo |

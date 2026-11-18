@@ -2,7 +2,7 @@
 // Its buttons write the board and nothing else: a row opened to read, the editor's map folded or zoomed.
 import type { EngineInterface, RenderElement, RenderInputOf, RenderSurface } from 'claude-code'
 
-import type { Board } from '../types'
+import type { Board, StationId } from '../types'
 import { change, quietly, readBoard } from './board'
 import { MAP_ASPECT, STATIONS, describeNow, drawMap, foldRows, formatMs, formatTokens, nowParts } from './map'
 import type { Setup } from './map'
@@ -130,7 +130,9 @@ export async function drawPane($: EngineInterface, e: PaneInput, setup: Setup, a
   )
 
   if (e.surface === 'terminal') {
-    const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}`).join(' · ')
+    // With `contextCost`, each station's sum after its count, as the braille map writes it: `Files 9 180k`.
+    const sum = (id: StationId): string => (setup.contextCost && (state.spent?.[id] ?? 0) > 0 ? ` ${formatTokens(state.spent?.[id] ?? 0)}` : '')
+    const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}${sum(s.id)}`).join(' · ')
     const map = await quietly(() => drawTerminalMap($, e, state, now, above))
     return (
       <Box flexDirection="column">
@@ -156,8 +158,7 @@ export async function drawPane($: EngineInterface, e: PaneInput, setup: Setup, a
   }
   const isEditor = e.surface === 'vscode'
   const zoom = isEditor ? state.zoom : undefined
-  // Each station's share of the context is on the desktop map only, for now; the editor's map is drawn too small for it.
-  const map = <Svg source={drawMap(state, now, setup, e.surface === 'desktop')}alt={`${t.title}. ${describeNow(state, t)}`} {...(zoom !== undefined ? { width: zoom, height: Math.round(zoom * MAP_ASPECT) } : {})} />
+  const map = <Svg source={drawMap(state, now, setup)} alt={`${t.title}. ${describeNow(state, t)}`} {...(zoom !== undefined ? { width: zoom, height: Math.round(zoom * MAP_ASPECT) } : {})} />
   if (!isEditor) {
     return (
       <Box flexDirection="column">
